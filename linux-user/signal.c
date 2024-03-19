@@ -34,9 +34,6 @@
 #include "user/safe-syscall.h"
 #include "tcg/tcg.h"
 
-/* target_siginfo_t must fit in gdbstub's siginfo save area. */
-QEMU_BUILD_BUG_ON(sizeof(target_siginfo_t) > MAX_SIGINFO_LENGTH);
-
 static struct target_sigaction sigact_table[TARGET_NSIG];
 
 static void host_signal_handler(int host_signum, siginfo_t *info,
@@ -175,7 +172,7 @@ void target_to_host_old_sigset(sigset_t *sigset,
 
 int block_signals(void)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
     sigset_t set;
 
     /* It's OK to block everything including SIGSEGV, because we won't
@@ -197,7 +194,7 @@ int block_signals(void)
  */
 int do_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     if (oldset) {
         *oldset = ts->signal_mask;
@@ -240,7 +237,7 @@ int do_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
  */
 void set_sigmask(const sigset_t *set)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     ts->signal_mask = *set;
 }
@@ -249,7 +246,7 @@ void set_sigmask(const sigset_t *set)
 
 int on_sig_stack(unsigned long sp)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     return (sp - ts->sigaltstack_used.ss_sp
             < ts->sigaltstack_used.ss_size);
@@ -257,7 +254,7 @@ int on_sig_stack(unsigned long sp)
 
 int sas_ss_flags(unsigned long sp)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     return (ts->sigaltstack_used.ss_size == 0 ? SS_DISABLE
             : on_sig_stack(sp) ? SS_ONSTACK : 0);
@@ -268,7 +265,7 @@ abi_ulong target_sigsp(abi_ulong sp, struct target_sigaction *ka)
     /*
      * This is the X/Open sanctioned signal stack switching.
      */
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     if ((ka->sa_flags & TARGET_SA_ONSTACK) && !sas_ss_flags(sp)) {
         return ts->sigaltstack_used.ss_sp + ts->sigaltstack_used.ss_size;
@@ -278,7 +275,7 @@ abi_ulong target_sigsp(abi_ulong sp, struct target_sigaction *ka)
 
 void target_save_altstack(target_stack_t *uss, CPUArchState *env)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     __put_user(ts->sigaltstack_used.ss_sp, &uss->ss_sp);
     __put_user(sas_ss_flags(get_sp_from_cpustate(env)), &uss->ss_flags);
@@ -287,7 +284,7 @@ void target_save_altstack(target_stack_t *uss, CPUArchState *env)
 
 abi_long target_restore_altstack(target_stack_t *uss, CPUArchState *env)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
     size_t minstacksize = TARGET_MINSIGSTKSZ;
     target_stack_t ss;
 
@@ -412,8 +409,8 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
     tinfo->si_code = deposit32(si_code, 16, 16, si_type);
 }
 
-static void tswap_siginfo(target_siginfo_t *tinfo,
-                          const target_siginfo_t *info)
+void tswap_siginfo(target_siginfo_t *tinfo,
+                   const target_siginfo_t *info)
 {
     int si_type = extract32(info->si_code, 16, 16);
     int si_code = sextract32(info->si_code, 0, 16);
@@ -574,7 +571,7 @@ static void signal_table_init(void)
 
 void signal_init(void)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
     struct sigaction act, oact;
 
     /* initialize signal conversion tables */
@@ -626,6 +623,7 @@ void signal_init(void)
 void force_sig(int sig)
 {
     CPUState *cpu = thread_cpu;
+    CPUArchState *env = cpu_env(cpu);
     target_siginfo_t info = {};
 
     info.si_signo = sig;
@@ -633,7 +631,7 @@ void force_sig(int sig)
     info.si_code = TARGET_SI_KERNEL;
     info._sifields._kill._pid = 0;
     info._sifields._kill._uid = 0;
-    queue_signal(cpu_env(cpu), info.si_signo, QEMU_SI_KILL, &info);
+    queue_signal(env, info.si_signo, QEMU_SI_KILL, &info);
 }
 
 /*
@@ -643,13 +641,14 @@ void force_sig(int sig)
 void force_sig_fault(int sig, int code, abi_ulong addr)
 {
     CPUState *cpu = thread_cpu;
+    CPUArchState *env = cpu_env(cpu);
     target_siginfo_t info = {};
 
     info.si_signo = sig;
     info.si_errno = 0;
     info.si_code = code;
     info._sifields._sigfault._addr = addr;
-    queue_signal(cpu_env(cpu), sig, QEMU_SI_FAULT, &info);
+    queue_signal(env, sig, QEMU_SI_FAULT, &info);
 }
 
 /* Force a SIGSEGV if we couldn't write to memory trying to set
@@ -731,7 +730,7 @@ static G_NORETURN
 void dump_core_and_abort(CPUArchState *env, int target_sig)
 {
     CPUState *cpu = env_cpu(env);
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = (TaskState *)cpu->opaque;
     int host_sig, core_dumped = 0;
 
     /* On exit, undo the remapping of SIGABRT. */
@@ -770,7 +769,7 @@ void queue_signal(CPUArchState *env, int sig, int si_type,
                   target_siginfo_t *info)
 {
     CPUState *cpu = env_cpu(env);
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = cpu->opaque;
 
     trace_user_queue_signal(env, sig);
 
@@ -955,7 +954,7 @@ static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 {
     CPUState *cpu = thread_cpu;
     CPUArchState *env = cpu_env(cpu);
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = cpu->opaque;
     target_siginfo_t tinfo;
     host_sigcontext *uc = puc;
     struct emulated_sigtable *k;
@@ -1175,19 +1174,13 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
     sigset_t set;
     target_sigset_t target_old_set;
     struct target_sigaction *sa;
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = cpu->opaque;
 
     trace_user_handle_signal(cpu_env, sig);
     /* dequeue signal */
     k->pending = 0;
 
-    /*
-     * Writes out siginfo values byteswapped, accordingly to the target. It also
-     * cleans the si_type from si_code making it correct for the target.
-     */
-    tswap_siginfo(&k->info, &k->info);
-
-    sig = gdb_handlesig(cpu, sig, NULL, &k->info, sizeof(k->info));
+    sig = gdb_handlesig(cpu, sig);
     if (!sig) {
         sa = NULL;
         handler = TARGET_SIG_IGN;
@@ -1263,7 +1256,7 @@ void process_pending_signals(CPUArchState *cpu_env)
 {
     CPUState *cpu = env_cpu(cpu_env);
     int sig;
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = cpu->opaque;
     sigset_t set;
     sigset_t *blocked_set;
 
@@ -1323,7 +1316,7 @@ void process_pending_signals(CPUArchState *cpu_env)
 int process_sigsuspend_mask(sigset_t **pset, target_ulong sigset,
                             target_ulong sigsize)
 {
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
     sigset_t *host_set = &ts->sigsuspend_mask;
     target_sigset_t *target_sigset;
 

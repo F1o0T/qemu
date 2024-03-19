@@ -23,7 +23,6 @@
 #include "hw/xen/xen-hvm-common.h"
 #include "hw/xen/arch_hvm.h"
 #include <xen/hvm/e820.h>
-#include "exec/target_page.h"
 
 static MemoryRegion ram_640k, ram_lo, ram_hi;
 static MemoryRegion *framebuffer;
@@ -150,12 +149,12 @@ static void xen_ram_init(PCMachineState *pcms,
          */
         block_len = (4 * GiB) + x86ms->above_4g_mem_size;
     }
-    memory_region_init_ram(&xen_memory, NULL, "xen.ram", block_len,
+    memory_region_init_ram(&ram_memory, NULL, "xen.ram", block_len,
                            &error_fatal);
-    *ram_memory_p = &xen_memory;
+    *ram_memory_p = &ram_memory;
 
     memory_region_init_alias(&ram_640k, NULL, "xen.ram.640k",
-                             &xen_memory, 0, 0xa0000);
+                             &ram_memory, 0, 0xa0000);
     memory_region_add_subregion(sysmem, 0, &ram_640k);
     /* Skip of the VGA IO memory space, it will be registered later by the VGA
      * emulated device.
@@ -164,23 +163,22 @@ static void xen_ram_init(PCMachineState *pcms,
      * the Options ROM, so it is registered here as RAM.
      */
     memory_region_init_alias(&ram_lo, NULL, "xen.ram.lo",
-                             &xen_memory, 0xc0000,
+                             &ram_memory, 0xc0000,
                              x86ms->below_4g_mem_size - 0xc0000);
     memory_region_add_subregion(sysmem, 0xc0000, &ram_lo);
     if (x86ms->above_4g_mem_size > 0) {
         memory_region_init_alias(&ram_hi, NULL, "xen.ram.hi",
-                                 &xen_memory, 0x100000000ULL,
+                                 &ram_memory, 0x100000000ULL,
                                  x86ms->above_4g_mem_size);
         memory_region_add_subregion(sysmem, 0x100000000ULL, &ram_hi);
     }
 }
 
-static XenPhysmap *get_physmapping(hwaddr start_addr, ram_addr_t size,
-                                   int page_mask)
+static XenPhysmap *get_physmapping(hwaddr start_addr, ram_addr_t size)
 {
     XenPhysmap *physmap = NULL;
 
-    start_addr &= page_mask;
+    start_addr &= TARGET_PAGE_MASK;
 
     QLIST_FOREACH(physmap, &xen_physmap, list) {
         if (range_covers_byte(physmap->start_addr, physmap->size, start_addr)) {
@@ -190,10 +188,9 @@ static XenPhysmap *get_physmapping(hwaddr start_addr, ram_addr_t size,
     return NULL;
 }
 
-static hwaddr xen_phys_offset_to_gaddr(hwaddr phys_offset, ram_addr_t size,
-                                       int page_mask)
+static hwaddr xen_phys_offset_to_gaddr(hwaddr phys_offset, ram_addr_t size)
 {
-    hwaddr addr = phys_offset & page_mask;
+    hwaddr addr = phys_offset & TARGET_PAGE_MASK;
     XenPhysmap *physmap = NULL;
 
     QLIST_FOREACH(physmap, &xen_physmap, list) {
@@ -248,9 +245,6 @@ static int xen_add_to_physmap(XenIOState *state,
                               MemoryRegion *mr,
                               hwaddr offset_within_region)
 {
-    unsigned target_page_bits = qemu_target_page_bits();
-    int page_size = qemu_target_page_size();
-    int page_mask = -page_size;
     unsigned long nr_pages;
     int rc = 0;
     XenPhysmap *physmap = NULL;
@@ -258,7 +252,7 @@ static int xen_add_to_physmap(XenIOState *state,
     hwaddr phys_offset = memory_region_get_ram_addr(mr);
     const char *mr_name;
 
-    if (get_physmapping(start_addr, size, page_mask)) {
+    if (get_physmapping(start_addr, size)) {
         return 0;
     }
     if (size <= 0) {
@@ -298,9 +292,9 @@ go_physmap:
         return 0;
     }
 
-    pfn = phys_offset >> target_page_bits;
-    start_gpfn = start_addr >> target_page_bits;
-    nr_pages = size >> target_page_bits;
+    pfn = phys_offset >> TARGET_PAGE_BITS;
+    start_gpfn = start_addr >> TARGET_PAGE_BITS;
+    nr_pages = size >> TARGET_PAGE_BITS;
     rc = xendevicemodel_relocate_memory(xen_dmod, xen_domid, nr_pages, pfn,
                                         start_gpfn);
     if (rc) {
@@ -314,8 +308,8 @@ go_physmap:
     }
 
     rc = xendevicemodel_pin_memory_cacheattr(xen_dmod, xen_domid,
-                                   start_addr >> target_page_bits,
-                                   (start_addr + size - 1) >> target_page_bits,
+                                   start_addr >> TARGET_PAGE_BITS,
+                                   (start_addr + size - 1) >> TARGET_PAGE_BITS,
                                    XEN_DOMCTL_MEM_CACHEATTR_WB);
     if (rc) {
         error_report("pin_memory_cacheattr failed: %s", strerror(errno));
@@ -327,14 +321,11 @@ static int xen_remove_from_physmap(XenIOState *state,
                                    hwaddr start_addr,
                                    ram_addr_t size)
 {
-    unsigned target_page_bits = qemu_target_page_bits();
-    int page_size = qemu_target_page_size();
-    int page_mask = -page_size;
     int rc = 0;
     XenPhysmap *physmap = NULL;
     hwaddr phys_offset = 0;
 
-    physmap = get_physmapping(start_addr, size, page_mask);
+    physmap = get_physmapping(start_addr, size);
     if (physmap == NULL) {
         return -1;
     }
@@ -345,9 +336,9 @@ static int xen_remove_from_physmap(XenIOState *state,
     DPRINTF("unmapping vram to %"HWADDR_PRIx" - %"HWADDR_PRIx", at "
             "%"HWADDR_PRIx"\n", start_addr, start_addr + size, phys_offset);
 
-    size >>= target_page_bits;
-    start_addr >>= target_page_bits;
-    phys_offset >>= target_page_bits;
+    size >>= TARGET_PAGE_BITS;
+    start_addr >>= TARGET_PAGE_BITS;
+    phys_offset >>= TARGET_PAGE_BITS;
     rc = xendevicemodel_relocate_memory(xen_dmod, xen_domid, size, start_addr,
                                         phys_offset);
     if (rc) {
@@ -376,16 +367,13 @@ static void xen_sync_dirty_bitmap(XenIOState *state,
                                   hwaddr start_addr,
                                   ram_addr_t size)
 {
-    unsigned target_page_bits = qemu_target_page_bits();
-    int page_size = qemu_target_page_size();
-    int page_mask = -page_size;
-    hwaddr npages = size >> target_page_bits;
+    hwaddr npages = size >> TARGET_PAGE_BITS;
     const int width = sizeof(unsigned long) * 8;
     size_t bitmap_size = DIV_ROUND_UP(npages, width);
     int rc, i, j;
     const XenPhysmap *physmap = NULL;
 
-    physmap = get_physmapping(start_addr, size, page_mask);
+    physmap = get_physmapping(start_addr, size);
     if (physmap == NULL) {
         /* not handled */
         return;
@@ -399,7 +387,7 @@ static void xen_sync_dirty_bitmap(XenIOState *state,
         return;
     }
 
-    rc = xen_track_dirty_vram(xen_domid, start_addr >> target_page_bits,
+    rc = xen_track_dirty_vram(xen_domid, start_addr >> TARGET_PAGE_BITS,
                               npages, dirty_bitmap);
     if (rc < 0) {
 #ifndef ENODATA
@@ -420,7 +408,8 @@ static void xen_sync_dirty_bitmap(XenIOState *state,
             j = ctzl(map);
             map &= ~(1ul << j);
             memory_region_set_dirty(framebuffer,
-                                    (i * width + j) * page_size, page_size);
+                                    (i * width + j) * TARGET_PAGE_SIZE,
+                                    TARGET_PAGE_SIZE);
         };
     }
 }
@@ -640,21 +629,17 @@ void xen_register_framebuffer(MemoryRegion *mr)
 
 void xen_hvm_modified_memory(ram_addr_t start, ram_addr_t length)
 {
-    unsigned target_page_bits = qemu_target_page_bits();
-    int page_size = qemu_target_page_size();
-    int page_mask = -page_size;
-
     if (unlikely(xen_in_migration)) {
         int rc;
         ram_addr_t start_pfn, nb_pages;
 
-        start = xen_phys_offset_to_gaddr(start, length, page_mask);
+        start = xen_phys_offset_to_gaddr(start, length);
 
         if (length == 0) {
-            length = page_size;
+            length = TARGET_PAGE_SIZE;
         }
-        start_pfn = start >> target_page_bits;
-        nb_pages = ((start + length + page_size - 1) >> target_page_bits)
+        start_pfn = start >> TARGET_PAGE_BITS;
+        nb_pages = ((start + length + TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS)
             - start_pfn;
         rc = xen_modified_memory(xen_domid, start_pfn, nb_pages);
         if (rc) {
@@ -677,9 +662,6 @@ void qmp_xen_set_global_dirty_log(bool enable, Error **errp)
 void arch_xen_set_memory(XenIOState *state, MemoryRegionSection *section,
                                 bool add)
 {
-    unsigned target_page_bits = qemu_target_page_bits();
-    int page_size = qemu_target_page_size();
-    int page_mask = -page_size;
     hwaddr start_addr = section->offset_within_address_space;
     ram_addr_t size = int128_get64(section->size);
     bool log_dirty = memory_region_is_logging(section->mr, DIRTY_MEMORY_VGA);
@@ -695,8 +677,8 @@ void arch_xen_set_memory(XenIOState *state, MemoryRegionSection *section,
 
     trace_xen_client_set_memory(start_addr, size, log_dirty);
 
-    start_addr &= page_mask;
-    size = ROUND_UP(size, page_size);
+    start_addr &= TARGET_PAGE_MASK;
+    size = TARGET_PAGE_ALIGN(size);
 
     if (add) {
         if (!memory_region_is_rom(section->mr)) {
@@ -705,8 +687,8 @@ void arch_xen_set_memory(XenIOState *state, MemoryRegionSection *section,
         } else {
             mem_type = HVMMEM_ram_ro;
             if (xen_set_mem_type(xen_domid, mem_type,
-                                 start_addr >> target_page_bits,
-                                 size >> target_page_bits)) {
+                                 start_addr >> TARGET_PAGE_BITS,
+                                 size >> TARGET_PAGE_BITS)) {
                 DPRINTF("xen_set_mem_type error, addr: "HWADDR_FMT_plx"\n",
                         start_addr);
             }

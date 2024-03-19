@@ -112,7 +112,7 @@ void setup_rt_frame(int sig, struct target_sigaction *ka,
     abi_ulong frame_addr, sp, haddr;
     struct target_rt_sigframe *frame;
     int i;
-    TaskState *ts = get_task_state(thread_cpu);
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     sp = get_sp_from_cpustate(env);
     if ((ka->sa_flags & TARGET_SA_ONSTACK) && !sas_ss_flags(sp)) {
@@ -127,7 +127,7 @@ void setup_rt_frame(int sig, struct target_sigaction *ka,
         goto give_sigsegv;
     }
 
-    frame->info = *info;
+    tswap_siginfo(&frame->info, info);
     frame->uc.tuc_flags = 0;
     frame->uc.tuc_link = 0;
 

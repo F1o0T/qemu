@@ -47,17 +47,12 @@ static bool vhost_vdpa_listener_skipped_section(MemoryRegionSection *section,
                                                 int page_mask)
 {
     Int128 llend;
-    bool is_ram = memory_region_is_ram(section->mr);
-    bool is_iommu = memory_region_is_iommu(section->mr);
-    bool is_protected = memory_region_is_protected(section->mr);
 
-    /* vhost-vDPA doesn't allow MMIO to be mapped  */
-    bool is_ram_device = memory_region_is_ram_device(section->mr);
-
-    if ((!is_ram && !is_iommu) || is_protected || is_ram_device) {
-        trace_vhost_vdpa_skipped_memory_section(is_ram, is_iommu, is_protected,
-                                                is_ram_device, iova_min,
-                                                iova_max, page_mask);
+    if ((!memory_region_is_ram(section->mr) &&
+         !memory_region_is_iommu(section->mr)) ||
+        memory_region_is_protected(section->mr) ||
+        /* vhost-vDPA doesn't allow MMIO to be mapped  */
+        memory_region_is_ram_device(section->mr)) {
         return true;
     }
 
@@ -74,7 +69,7 @@ static bool vhost_vdpa_listener_skipped_section(MemoryRegionSection *section,
      * size that maps to the kernel
      */
 
-    if (!is_iommu) {
+    if (!memory_region_is_iommu(section->mr)) {
         llend = vhost_vdpa_section_end(section, page_mask);
         if (int128_gt(llend, int128_make64(iova_max))) {
             error_report("RAM section out of device range (max=0x%" PRIx64
@@ -560,11 +555,6 @@ static bool vhost_vdpa_first_dev(struct vhost_dev *dev)
     return v->index == 0;
 }
 
-static bool vhost_vdpa_last_dev(struct vhost_dev *dev)
-{
-    return dev->vq_index + dev->nvqs == dev->vq_index_end;
-}
-
 static int vhost_vdpa_get_dev_features(struct vhost_dev *dev,
                                        uint64_t *features)
 {
@@ -975,10 +965,7 @@ static int vhost_vdpa_get_config(struct vhost_dev *dev, uint8_t *config,
 static int vhost_vdpa_set_dev_vring_base(struct vhost_dev *dev,
                                          struct vhost_vring_state *ring)
 {
-    struct vhost_vdpa *v = dev->opaque;
-
-    trace_vhost_vdpa_set_dev_vring_base(dev, ring->index, ring->num,
-                                        v->shadow_vqs_enabled);
+    trace_vhost_vdpa_set_vring_base(dev, ring->index, ring->num);
     return vhost_vdpa_call(dev, VHOST_SET_VRING_BASE, ring);
 }
 
@@ -1328,7 +1315,7 @@ static int vhost_vdpa_dev_start(struct vhost_dev *dev, bool started)
         vhost_vdpa_host_notifiers_uninit(dev, dev->nvqs);
     }
 
-    if (!vhost_vdpa_last_dev(dev)) {
+    if (dev->vq_index + dev->nvqs != dev->vq_index_end) {
         return 0;
     }
 
@@ -1350,7 +1337,7 @@ static void vhost_vdpa_reset_status(struct vhost_dev *dev)
 {
     struct vhost_vdpa *v = dev->opaque;
 
-    if (!vhost_vdpa_last_dev(dev)) {
+    if (dev->vq_index + dev->nvqs != dev->vq_index_end) {
         return;
     }
 
@@ -1420,7 +1407,6 @@ static int vhost_vdpa_get_vring_base(struct vhost_dev *dev,
 
     if (v->shadow_vqs_enabled) {
         ring->num = virtio_queue_get_last_avail_idx(dev->vdev, ring->index);
-        trace_vhost_vdpa_get_vring_base(dev, ring->index, ring->num, true);
         return 0;
     }
 
@@ -1433,7 +1419,7 @@ static int vhost_vdpa_get_vring_base(struct vhost_dev *dev,
     }
 
     ret = vhost_vdpa_call(dev, VHOST_GET_VRING_BASE, ring);
-    trace_vhost_vdpa_get_vring_base(dev, ring->index, ring->num, false);
+    trace_vhost_vdpa_get_vring_base(dev, ring->index, ring->num);
     return ret;
 }
 
@@ -1461,15 +1447,7 @@ static int vhost_vdpa_set_vring_call(struct vhost_dev *dev,
 
     /* Remember last call fd because we can switch to SVQ anytime. */
     vhost_svq_set_svq_call_fd(svq, file->fd);
-    /*
-     * When SVQ is transitioning to off, shadow_vqs_enabled has
-     * not been set back to false yet, but the underlying call fd
-     * will have to switch back to the guest notifier to signal the
-     * passthrough virtqueues. In other situations, SVQ's own call
-     * fd shall be used to signal the device model.
-     */
-    if (v->shadow_vqs_enabled &&
-        v->shared->svq_switching != SVQ_TSTATE_DISABLING) {
+    if (v->shadow_vqs_enabled) {
         return 0;
     }
 

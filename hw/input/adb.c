@@ -231,9 +231,9 @@ static const VMStateDescription vmstate_adb_bus = {
     }
 };
 
-static void adb_bus_reset_hold(Object *obj)
+static void adb_bus_reset(BusState *qbus)
 {
-    ADBBusState *adb_bus = ADB_BUS(obj);
+    ADBBusState *adb_bus = ADB_BUS(qbus);
 
     adb_bus->autopoll_enabled = false;
     adb_bus->autopoll_mask = 0xffff;
@@ -262,11 +262,10 @@ static void adb_bus_unrealize(BusState *qbus)
 static void adb_bus_class_init(ObjectClass *klass, void *data)
 {
     BusClass *k = BUS_CLASS(klass);
-    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
     k->realize = adb_bus_realize;
     k->unrealize = adb_bus_unrealize;
-    rc->phases.hold = adb_bus_reset_hold;
+    k->reset = adb_bus_reset;
 }
 
 static const TypeInfo adb_bus_type_info = {

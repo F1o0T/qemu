@@ -54,9 +54,7 @@ struct loaderparams {
     const char *initrd_filename;
 };
 
-static PFlashCFI01 *virt_flash_create1(LoongArchMachineState *lams,
-                                       const char *name,
-                                       const char *alias_prop_name)
+static void virt_flash_create(LoongArchMachineState *lams)
 {
     DeviceState *dev = qdev_new(TYPE_PFLASH_CFI01);
 
@@ -68,78 +66,45 @@ static PFlashCFI01 *virt_flash_create1(LoongArchMachineState *lams,
     qdev_prop_set_uint16(dev, "id1", 0x18);
     qdev_prop_set_uint16(dev, "id2", 0x00);
     qdev_prop_set_uint16(dev, "id3", 0x00);
-    qdev_prop_set_string(dev, "name", name);
-    object_property_add_child(OBJECT(lams), name, OBJECT(dev));
-    object_property_add_alias(OBJECT(lams), alias_prop_name,
+    qdev_prop_set_string(dev, "name", "virt.flash");
+    object_property_add_child(OBJECT(lams), "virt.flash", OBJECT(dev));
+    object_property_add_alias(OBJECT(lams), "pflash",
                               OBJECT(dev), "drive");
-    return PFLASH_CFI01(dev);
-}
 
-static void virt_flash_create(LoongArchMachineState *lams)
-{
-    lams->flash[0] = virt_flash_create1(lams, "virt.flash0", "pflash0");
-    lams->flash[1] = virt_flash_create1(lams, "virt.flash1", "pflash1");
-}
-
-static void virt_flash_map1(PFlashCFI01 *flash,
-                            hwaddr base, hwaddr size,
-                            MemoryRegion *sysmem)
-{
-    DeviceState *dev = DEVICE(flash);
-    BlockBackend *blk;
-    hwaddr real_size = size;
-
-    blk = pflash_cfi01_get_blk(flash);
-    if (blk) {
-        real_size = blk_getlength(blk);
-        assert(real_size && real_size <= size);
-    }
-
-    assert(QEMU_IS_ALIGNED(real_size, VIRT_FLASH_SECTOR_SIZE));
-    assert(real_size / VIRT_FLASH_SECTOR_SIZE <= UINT32_MAX);
-
-    qdev_prop_set_uint32(dev, "num-blocks", real_size / VIRT_FLASH_SECTOR_SIZE);
-    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
-    memory_region_add_subregion(sysmem, base,
-                                sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0));
+    lams->flash = PFLASH_CFI01(dev);
 }
 
 static void virt_flash_map(LoongArchMachineState *lams,
                            MemoryRegion *sysmem)
 {
-    PFlashCFI01 *flash0 = lams->flash[0];
-    PFlashCFI01 *flash1 = lams->flash[1];
+    PFlashCFI01 *flash = lams->flash;
+    DeviceState *dev = DEVICE(flash);
+    hwaddr base = VIRT_FLASH_BASE;
+    hwaddr size = VIRT_FLASH_SIZE;
 
-    virt_flash_map1(flash0, VIRT_FLASH0_BASE, VIRT_FLASH0_SIZE, sysmem);
-    virt_flash_map1(flash1, VIRT_FLASH1_BASE, VIRT_FLASH1_SIZE, sysmem);
+    assert(QEMU_IS_ALIGNED(size, VIRT_FLASH_SECTOR_SIZE));
+    assert(size / VIRT_FLASH_SECTOR_SIZE <= UINT32_MAX);
+
+    qdev_prop_set_uint32(dev, "num-blocks", size / VIRT_FLASH_SECTOR_SIZE);
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+    memory_region_add_subregion(sysmem, base,
+                                sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0));
+
 }
 
 static void fdt_add_flash_node(LoongArchMachineState *lams)
 {
     MachineState *ms = MACHINE(lams);
     char *nodename;
-    MemoryRegion *flash_mem;
 
-    hwaddr flash0_base;
-    hwaddr flash0_size;
+    hwaddr flash_base = VIRT_FLASH_BASE;
+    hwaddr flash_size = VIRT_FLASH_SIZE;
 
-    hwaddr flash1_base;
-    hwaddr flash1_size;
-
-    flash_mem = pflash_cfi01_get_memory(lams->flash[0]);
-    flash0_base = flash_mem->addr;
-    flash0_size = memory_region_size(flash_mem);
-
-    flash_mem = pflash_cfi01_get_memory(lams->flash[1]);
-    flash1_base = flash_mem->addr;
-    flash1_size = memory_region_size(flash_mem);
-
-    nodename = g_strdup_printf("/flash@%" PRIx64, flash0_base);
+    nodename = g_strdup_printf("/flash@%" PRIx64, flash_base);
     qemu_fdt_add_subnode(ms->fdt, nodename);
     qemu_fdt_setprop_string(ms->fdt, nodename, "compatible", "cfi-flash");
     qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg",
-                                 2, flash0_base, 2, flash0_size,
-                                 2, flash1_base, 2, flash1_size);
+                                 2, flash_base, 2, flash_size);
     qemu_fdt_setprop_cell(ms->fdt, nodename, "bank-width", 4);
     g_free(nodename);
 }
@@ -539,7 +504,9 @@ static void loongarch_devices_init(DeviceState *pch_pic, LoongArchMachineState *
     fdt_add_uart_node(lams);
 
     /* Network init */
-    pci_init_nic_devices(pci_bus, mc->default_nic);
+    for (i = 0; i < nb_nics; i++) {
+        pci_nic_init_nofail(&nd_table[i], pci_bus, mc->default_nic, NULL);
+    }
 
     /*
      * There are some invalid guest memory access.
@@ -672,31 +639,11 @@ static void loongarch_firmware_init(LoongArchMachineState *lams)
 {
     char *filename = MACHINE(lams)->firmware;
     char *bios_name = NULL;
-    int bios_size, i;
-    BlockBackend *pflash_blk0;
-    MemoryRegion *mr;
+    int bios_size;
 
     lams->bios_loaded = false;
 
-    /* Map legacy -drive if=pflash to machine properties */
-    for (i = 0; i < ARRAY_SIZE(lams->flash); i++) {
-        pflash_cfi01_legacy_drive(lams->flash[i],
-                                  drive_get(IF_PFLASH, 0, i));
-    }
-
     virt_flash_map(lams, get_system_memory());
-
-    pflash_blk0 = pflash_cfi01_get_blk(lams->flash[0]);
-
-    if (pflash_blk0) {
-        if (filename) {
-            error_report("cannot use both '-bios' and '-drive if=pflash'"
-                         "options at once");
-            exit(1);
-        }
-        lams->bios_loaded = true;
-        return;
-    }
 
     if (filename) {
         bios_name = qemu_find_file(QEMU_FILE_TYPE_BIOS, filename);
@@ -705,15 +652,21 @@ static void loongarch_firmware_init(LoongArchMachineState *lams)
             exit(1);
         }
 
-        mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(lams->flash[0]), 0);
-        bios_size = load_image_mr(bios_name, mr);
+        bios_size = load_image_targphys(bios_name, VIRT_BIOS_BASE, VIRT_BIOS_SIZE);
         if (bios_size < 0) {
             error_report("Could not load ROM image '%s'", bios_name);
             exit(1);
         }
+
         g_free(bios_name);
+
+        memory_region_init_ram(&lams->bios, NULL, "loongarch.bios",
+                               VIRT_BIOS_SIZE, &error_fatal);
+        memory_region_set_readonly(&lams->bios, true);
+        memory_region_add_subregion(get_system_memory(), VIRT_BIOS_BASE, &lams->bios);
         lams->bios_loaded = true;
     }
+
 }
 
 static void reset_load_elf(void *opaque)
@@ -858,7 +811,7 @@ static void loongarch_init(MachineState *machine)
     for (i = 0; i < possible_cpus->len; i++) {
         cpu = cpu_create(machine->cpu_type);
         cpu->cpu_index = i;
-        machine->possible_cpus->cpus[i].cpu = cpu;
+        machine->possible_cpus->cpus[i].cpu = OBJECT(cpu);
         lacpu = LOONGARCH_CPU(cpu);
         lacpu->phy_id = machine->possible_cpus->cpus[i].arch_id;
     }

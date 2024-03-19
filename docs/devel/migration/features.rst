@@ -10,4 +10,3 @@ Migration has plenty of features to support different use cases.
    dirty-limit
    vfio
    virtio
-   mapped-ram

@@ -200,7 +200,6 @@ static const MemoryRegionOps raven_io_ops = {
     .write = raven_io_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .impl.max_access_size = 4,
-    .impl.unaligned = true,
     .valid.unaligned = true,
 };
 

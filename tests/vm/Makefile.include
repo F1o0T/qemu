@@ -102,7 +102,7 @@ $(IMAGES_DIR)/%.img:	$(SRC_PATH)/tests/vm/% \
 		$(if $(LOG_CONSOLE),--log-console) \
 		--source-path $(SRC_PATH) \
 		--image "$@" \
-		$(if $(filter-out check-venv, $?), --force) \
+		--force \
 		--build-image $@, \
 		"  VM-IMAGE $*")
 

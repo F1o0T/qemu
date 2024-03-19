@@ -1079,7 +1079,9 @@ void ppce500_init(MachineState *machine)
 
     if (pci_bus) {
         /* Register network interfaces. */
-        pci_init_nic_devices(pci_bus, mc->default_nic);
+        for (i = 0; i < nb_nics; i++) {
+            pci_nic_init_nofail(&nd_table[i], pci_bus, mc->default_nic, NULL);
+        }
     }
 
     /* Register spinning region */

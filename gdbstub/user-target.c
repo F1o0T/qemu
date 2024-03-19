@@ -204,7 +204,7 @@ int gdb_target_signal_to_gdb(int sig)
 
 int gdb_get_cpu_index(CPUState *cpu)
 {
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = (TaskState *) cpu->opaque;
     return ts ? ts->ts_tid : -1;
 }
 
@@ -399,7 +399,7 @@ void gdb_handle_query_xfer_exec_file(GArray *params, void *user_ctx)
         return;
     }
 
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = cpu->opaque;
     if (!ts || !ts->bprm || !ts->bprm->filename) {
         gdb_put_packet("E00");
         return;
@@ -417,9 +417,4 @@ void gdb_handle_query_xfer_exec_file(GArray *params, void *user_ctx)
     g_string_printf(gdbserver_state.str_buf, "l%.*s", length,
                     ts->bprm->filename + offset);
     gdb_put_strbuf();
-}
-
-int gdb_target_sigtrap(void)
-{
-    return TARGET_SIGTRAP;
 }

@@ -44,7 +44,6 @@ subdir('virtio')
 subdir('watchdog')
 subdir('xen')
 subdir('xenpv')
-subdir('fsi')
 
 subdir('alpha')
 subdir('arm')

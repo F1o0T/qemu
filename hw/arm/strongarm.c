@@ -46,7 +46,8 @@
 #include "qemu/log.h"
 #include "qom/object.h"
 #include "target/arm/cpu-qom.h"
-#include "trace.h"
+
+//#define DEBUG
 
 /*
  TODO
@@ -64,6 +65,12 @@
  - MCP
  - Enhance UART with modem signals
  */
+
+#ifdef DEBUG
+# define DPRINTF(format, ...) printf(format , ## __VA_ARGS__)
+#else
+# define DPRINTF(format, ...) do { } while (0)
+#endif
 
 static struct {
     hwaddr io_base;
@@ -144,9 +151,8 @@ static uint64_t strongarm_pic_mem_read(void *opaque, hwaddr offset,
     case ICPR:
         return s->pending;
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad register offset 0x"HWADDR_FMT_plx"\n",
-                      __func__, offset);
+        printf("%s: Bad register offset 0x" HWADDR_FMT_plx "\n",
+                        __func__, offset);
         return 0;
     }
 }
@@ -167,9 +173,8 @@ static void strongarm_pic_mem_write(void *opaque, hwaddr offset,
         s->int_idle = (value & 1) ? 0 : ~0;
         break;
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                     "%s: Bad register offset 0x"HWADDR_FMT_plx"\n",
-                     __func__, offset);
+        printf("%s: Bad register offset 0x" HWADDR_FMT_plx "\n",
+                        __func__, offset);
         break;
     }
     strongarm_pic_update(s);
@@ -328,9 +333,7 @@ static uint64_t strongarm_rtc_read(void *opaque, hwaddr addr,
                 ((qemu_clock_get_ms(rtc_clock) - s->last_hz) << 15) /
                 (1000 * ((s->rttr & 0xffff) + 1));
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad rtc register read 0x"HWADDR_FMT_plx"\n",
-                      __func__, addr);
+        printf("%s: Bad register 0x" HWADDR_FMT_plx "\n", __func__, addr);
         return 0;
     }
 }
@@ -372,9 +375,7 @@ static void strongarm_rtc_write(void *opaque, hwaddr addr,
         break;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad rtc register write 0x"HWADDR_FMT_plx"\n",
-                      __func__, addr);
+        printf("%s: Bad register 0x" HWADDR_FMT_plx "\n", __func__, addr);
     }
 }
 
@@ -555,12 +556,12 @@ static uint64_t strongarm_gpio_read(void *opaque, hwaddr offset,
 
     case GPSR:        /* GPIO Pin-Output Set registers */
         qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: read from write only register GPSR\n", __func__);
+                      "strongarm GPIO: read from write only register GPSR\n");
         return 0;
 
     case GPCR:        /* GPIO Pin-Output Clear registers */
         qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: read from write only register GPCR\n", __func__);
+                      "strongarm GPIO: read from write only register GPCR\n");
         return 0;
 
     case GRER:        /* GPIO Rising-Edge Detect Enable registers */
@@ -580,9 +581,7 @@ static uint64_t strongarm_gpio_read(void *opaque, hwaddr offset,
         return s->status;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad gpio read offset 0x"HWADDR_FMT_plx"\n",
-                      __func__, offset);
+        printf("%s: Bad offset 0x" HWADDR_FMT_plx "\n", __func__, offset);
     }
 
     return 0;
@@ -627,9 +626,7 @@ static void strongarm_gpio_write(void *opaque, hwaddr offset,
         break;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad write offset 0x"HWADDR_FMT_plx"\n",
-                      __func__, offset);
+        printf("%s: Bad offset 0x" HWADDR_FMT_plx "\n", __func__, offset);
     }
 }
 
@@ -785,9 +782,7 @@ static uint64_t strongarm_ppc_read(void *opaque, hwaddr offset,
         return s->ppfr | ~0x7f001;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad ppc read offset 0x"HWADDR_FMT_plx "\n",
-                      __func__, offset);
+        printf("%s: Bad offset 0x" HWADDR_FMT_plx "\n", __func__, offset);
     }
 
     return 0;
@@ -822,9 +817,7 @@ static void strongarm_ppc_write(void *opaque, hwaddr offset,
         break;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad ppc write offset 0x"HWADDR_FMT_plx"\n",
-                      __func__, offset);
+        printf("%s: Bad offset 0x" HWADDR_FMT_plx "\n", __func__, offset);
     }
 }
 
@@ -1036,13 +1029,8 @@ static void strongarm_uart_update_parameters(StrongARMUARTState *s)
     s->char_transmit_time =  (NANOSECONDS_PER_SECOND / speed) * frame_size;
     qemu_chr_fe_ioctl(&s->chr, CHR_IOCTL_SERIAL_SET_PARAMS, &ssp);
 
-    trace_strongarm_uart_update_parameters((s->chr.chr ?
-                                           s->chr.chr->label : "NULL") ?:
-                                           "NULL",
-                                           speed,
-                                           parity,
-                                           data_bits,
-                                           stop_bits);
+    DPRINTF(stderr, "%s speed=%d parity=%c data=%d stop=%d\n", s->chr->label,
+            speed, parity, data_bits, stop_bits);
 }
 
 static void strongarm_uart_rx_to(void *opaque)
@@ -1176,9 +1164,7 @@ static uint64_t strongarm_uart_read(void *opaque, hwaddr addr,
         return s->utsr1;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad uart register read 0x"HWADDR_FMT_plx"\n",
-                      __func__, addr);
+        printf("%s: Bad register 0x" HWADDR_FMT_plx "\n", __func__, addr);
         return 0;
     }
 }
@@ -1235,9 +1221,7 @@ static void strongarm_uart_write(void *opaque, hwaddr addr,
         break;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad uart register write 0x"HWADDR_FMT_plx"\n",
-                      __func__, addr);
+        printf("%s: Bad register 0x" HWADDR_FMT_plx "\n", __func__, addr);
     }
 }
 
@@ -1450,7 +1434,7 @@ static uint64_t strongarm_ssp_read(void *opaque, hwaddr addr,
             return 0xffffffff;
         }
         if (s->rx_level < 1) {
-            trace_strongarm_ssp_read_underrun();
+            printf("%s: SSP Rx Underrun\n", __func__);
             return 0xffffffff;
         }
         s->rx_level--;
@@ -1459,9 +1443,7 @@ static uint64_t strongarm_ssp_read(void *opaque, hwaddr addr,
         strongarm_ssp_fifo_update(s);
         return retval;
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad ssp register read 0x"HWADDR_FMT_plx"\n",
-                      __func__, addr);
+        printf("%s: Bad register 0x" HWADDR_FMT_plx "\n", __func__, addr);
         break;
     }
     return 0;
@@ -1476,8 +1458,8 @@ static void strongarm_ssp_write(void *opaque, hwaddr addr,
     case SSCR0:
         s->sscr[0] = value & 0xffbf;
         if ((s->sscr[0] & SSCR0_SSE) && SSCR0_DSS(value) < 4) {
-            qemu_log_mask(LOG_GUEST_ERROR, "%s: Wrong data size: %i bits\n",
-                          __func__, (int)SSCR0_DSS(value));
+            printf("%s: Wrong data size: %i bits\n", __func__,
+                   (int)SSCR0_DSS(value));
         }
         if (!(value & SSCR0_SSE)) {
             s->sssr = 0;
@@ -1489,9 +1471,7 @@ static void strongarm_ssp_write(void *opaque, hwaddr addr,
     case SSCR1:
         s->sscr[1] = value & 0x2f;
         if (value & SSCR1_LBM) {
-            qemu_log_mask(LOG_GUEST_ERROR,
-                          "%s: Attempt to use SSP LBM mode\n",
-                          __func__);
+            printf("%s: Attempt to use SSP LBM mode\n", __func__);
         }
         strongarm_ssp_fifo_update(s);
         break;
@@ -1529,9 +1509,7 @@ static void strongarm_ssp_write(void *opaque, hwaddr addr,
         break;
 
     default:
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: Bad ssp register write 0x"HWADDR_FMT_plx"\n",
-                      __func__,  addr);
+        printf("%s: Bad register 0x" HWADDR_FMT_plx "\n", __func__, addr);
         break;
     }
 }

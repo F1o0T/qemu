@@ -329,6 +329,8 @@ struct BusClass {
      */
     char *(*get_fw_dev_path)(DeviceState *dev);
 
+    void (*reset)(BusState *bus);
+
     /*
      * Return whether the device can be added to @bus,
      * based on the address that was set (via device properties)
@@ -1082,11 +1084,6 @@ typedef enum MachineInitPhase {
      * not been validated and machine_class->init has not yet been called.
      */
     PHASE_ACCEL_CREATED,
-
-    /*
-     * Late backend objects have been created and initialized.
-     */
-    PHASE_LATE_BACKENDS_CREATED,
 
     /*
      * machine_class->init has been called, thus creating any embedded

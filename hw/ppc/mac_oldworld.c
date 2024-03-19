@@ -277,7 +277,9 @@ static void ppc_heathrow_init(MachineState *machine)
 
     pci_vga_init(pci_bus);
 
-    pci_init_nic_devices(pci_bus, mc->default_nic);
+    for (i = 0; i < nb_nics; i++) {
+        pci_nic_init_nofail(&nd_table[i], pci_bus, mc->default_nic, NULL);
+    }
 
     /* MacIO IDE */
     ide_drive_get(hd, ARRAY_SIZE(hd));

@@ -93,9 +93,12 @@ QEMU_OPTS=
 
 
 # If TCG debugging, or TCI is enabled things are a lot slower
-# so we have to set our timeout for that. The current worst case
-# offender is the system memory test running under TCI.
-TIMEOUT=120
+# ??? Makefile no longer has any indication that TCI is enabled,
+# but for the record:
+#   15s    original default
+#   60s    with --enable-debug
+#   90s    with --enable-tcg-interpreter
+TIMEOUT=90
 
 ifeq ($(filter %-softmmu, $(TARGET)),)
 # The order we include is important. We include multiarch first and
@@ -168,7 +171,7 @@ RUN_TESTS+=$(EXTRA_RUNS)
 
 # Some plugins need additional arguments above the default to fully
 # exercise things. We can define them on a per-test basis here.
-run-plugin-%-with-libmem.so: PLUGIN_ARGS=$(COMMA)inline=true
+run-plugin-%-with-libmem.so: PLUGIN_ARGS=$(COMMA)inline=true$(COMMA)callback=true
 
 ifeq ($(filter %-softmmu, $(TARGET)),)
 run-%: %

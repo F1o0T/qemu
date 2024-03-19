@@ -1187,20 +1187,12 @@ static bool pmu_counter_enabled(CPUARMState *env, uint8_t counter)
     bool enabled, prohibited = false, filtered;
     bool secure = arm_is_secure(env);
     int el = arm_current_el(env);
-    uint64_t mdcr_el2;
-    uint8_t hpmn;
+    uint64_t mdcr_el2 = arm_mdcr_el2_eff(env);
+    uint8_t hpmn = mdcr_el2 & MDCR_HPMN;
 
-    /*
-     * We might be called for M-profile cores where MDCR_EL2 doesn't
-     * exist and arm_mdcr_el2_eff() will assert, so this early-exit check
-     * must be before we read that value.
-     */
     if (!arm_feature(env, ARM_FEATURE_PMU)) {
         return false;
     }
-
-    mdcr_el2 = arm_mdcr_el2_eff(env);
-    hpmn = mdcr_el2 & MDCR_HPMN;
 
     if (!arm_feature(env, ARM_FEATURE_EL2) ||
             (counter < hpmn || counter == 31)) {
@@ -1923,9 +1915,6 @@ static void scr_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
         if (cpu_isar_feature(aa64_rme, cpu)) {
             valid_mask |= SCR_NSE | SCR_GPF;
         }
-        if (cpu_isar_feature(aa64_ecv, cpu)) {
-            valid_mask |= SCR_ECVEN;
-        }
     } else {
         valid_mask &= ~(SCR_RW | SCR_ST);
         if (cpu_isar_feature(aa32_ras, cpu)) {
@@ -2533,11 +2522,6 @@ static CPAccessResult gt_counter_access(CPUARMState *env, int timeridx,
              : !extract32(env->cp15.cnthctl_el2, 0, 1))) {
             return CP_ACCESS_TRAP_EL2;
         }
-        if (has_el2 && timeridx == GTIMER_VIRT) {
-            if (FIELD_EX64(env->cp15.cnthctl_el2, CNTHCTL, EL1TVCT)) {
-                return CP_ACCESS_TRAP_EL2;
-            }
-        }
         break;
     }
     return CP_ACCESS_OK;
@@ -2579,11 +2563,6 @@ static CPAccessResult gt_timer_access(CPUARMState *env, int timeridx,
                 if (!extract32(env->cp15.cnthctl_el2, 1, 1)) {
                     return CP_ACCESS_TRAP_EL2;
                 }
-            }
-        }
-        if (has_el2 && timeridx == GTIMER_VIRT) {
-            if (FIELD_EX64(env->cp15.cnthctl_el2, CNTHCTL, EL1TVT)) {
-                return CP_ACCESS_TRAP_EL2;
             }
         }
         break;
@@ -2665,8 +2644,8 @@ static void gt_update_irq(ARMCPU *cpu, int timeridx)
      * It is RES0 in Secure and NonSecure state.
      */
     if ((ss == ARMSS_Root || ss == ARMSS_Realm) &&
-        ((timeridx == GTIMER_VIRT && (cnthctl & R_CNTHCTL_CNTVMASK_MASK)) ||
-         (timeridx == GTIMER_PHYS && (cnthctl & R_CNTHCTL_CNTPMASK_MASK)))) {
+        ((timeridx == GTIMER_VIRT && (cnthctl & CNTHCTL_CNTVMASK)) ||
+         (timeridx == GTIMER_PHYS && (cnthctl & CNTHCTL_CNTPMASK)))) {
         irqstate = 0;
     }
 
@@ -2685,25 +2664,6 @@ void gt_rme_post_el_change(ARMCPU *cpu, void *ignored)
     gt_update_irq(cpu, GTIMER_PHYS);
 }
 
-static uint64_t gt_phys_raw_cnt_offset(CPUARMState *env)
-{
-    if ((env->cp15.scr_el3 & SCR_ECVEN) &&
-        FIELD_EX64(env->cp15.cnthctl_el2, CNTHCTL, ECV) &&
-        arm_is_el2_enabled(env) &&
-        (arm_hcr_el2_eff(env) & (HCR_E2H | HCR_TGE)) != (HCR_E2H | HCR_TGE)) {
-        return env->cp15.cntpoff_el2;
-    }
-    return 0;
-}
-
-static uint64_t gt_phys_cnt_offset(CPUARMState *env)
-{
-    if (arm_current_el(env) >= 2) {
-        return 0;
-    }
-    return gt_phys_raw_cnt_offset(env);
-}
-
 static void gt_recalc_timer(ARMCPU *cpu, int timeridx)
 {
     ARMGenericTimer *gt = &cpu->env.cp15.c14_timer[timeridx];
@@ -2714,7 +2674,7 @@ static void gt_recalc_timer(ARMCPU *cpu, int timeridx)
          * reset timer to when ISTATUS next has to change
          */
         uint64_t offset = timeridx == GTIMER_VIRT ?
-            cpu->env.cp15.cntvoff_el2 : gt_phys_raw_cnt_offset(&cpu->env);
+                                      cpu->env.cp15.cntvoff_el2 : 0;
         uint64_t count = gt_get_countervalue(&cpu->env);
         /* Note that this must be unsigned 64 bit arithmetic: */
         int istatus = count - offset >= gt->cval;
@@ -2777,7 +2737,7 @@ static void gt_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri,
 
 static uint64_t gt_cnt_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
-    return gt_get_countervalue(env) - gt_phys_cnt_offset(env);
+    return gt_get_countervalue(env);
 }
 
 static uint64_t gt_virt_cnt_offset(CPUARMState *env)
@@ -2826,9 +2786,6 @@ static uint64_t gt_tval_read(CPUARMState *env, const ARMCPRegInfo *ri,
     case GTIMER_HYPVIRT:
         offset = gt_virt_cnt_offset(env);
         break;
-    case GTIMER_PHYS:
-        offset = gt_phys_cnt_offset(env);
-        break;
     }
 
     return (uint32_t)(env->cp15.c14_timer[timeridx].cval -
@@ -2845,9 +2802,6 @@ static void gt_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
     case GTIMER_VIRT:
     case GTIMER_HYPVIRT:
         offset = gt_virt_cnt_offset(env);
-        break;
-    case GTIMER_PHYS:
-        offset = gt_phys_cnt_offset(env);
         break;
     }
 
@@ -3006,40 +2960,12 @@ static void gt_cnthctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     ARMCPU *cpu = env_archcpu(env);
     uint32_t oldval = env->cp15.cnthctl_el2;
-    uint32_t valid_mask =
-        R_CNTHCTL_EL0PCTEN_E2H1_MASK |
-        R_CNTHCTL_EL0VCTEN_E2H1_MASK |
-        R_CNTHCTL_EVNTEN_MASK |
-        R_CNTHCTL_EVNTDIR_MASK |
-        R_CNTHCTL_EVNTI_MASK |
-        R_CNTHCTL_EL0VTEN_MASK |
-        R_CNTHCTL_EL0PTEN_MASK |
-        R_CNTHCTL_EL1PCTEN_E2H1_MASK |
-        R_CNTHCTL_EL1PTEN_MASK;
-
-    if (cpu_isar_feature(aa64_rme, cpu)) {
-        valid_mask |= R_CNTHCTL_CNTVMASK_MASK | R_CNTHCTL_CNTPMASK_MASK;
-    }
-    if (cpu_isar_feature(aa64_ecv_traps, cpu)) {
-        valid_mask |=
-            R_CNTHCTL_EL1TVT_MASK |
-            R_CNTHCTL_EL1TVCT_MASK |
-            R_CNTHCTL_EL1NVPCT_MASK |
-            R_CNTHCTL_EL1NVVCT_MASK |
-            R_CNTHCTL_EVNTIS_MASK;
-    }
-    if (cpu_isar_feature(aa64_ecv, cpu)) {
-        valid_mask |= R_CNTHCTL_ECV_MASK;
-    }
-
-    /* Clear RES0 bits */
-    value &= valid_mask;
 
     raw_write(env, ri, value);
 
-    if ((oldval ^ value) & R_CNTHCTL_CNTVMASK_MASK) {
+    if ((oldval ^ value) & CNTHCTL_CNTVMASK) {
         gt_update_irq(cpu, GTIMER_VIRT);
-    } else if ((oldval ^ value) & R_CNTHCTL_CNTPMASK_MASK) {
+    } else if ((oldval ^ value) & CNTHCTL_CNTPMASK) {
         gt_update_irq(cpu, GTIMER_PHYS);
     }
 }
@@ -3420,62 +3346,6 @@ static const ARMCPRegInfo generic_timer_cp_reginfo[] = {
     },
 };
 
-/*
- * FEAT_ECV adds extra views of CNTVCT_EL0 and CNTPCT_EL0 which
- * are "self-synchronizing". For QEMU all sysregs are self-synchronizing,
- * so our implementations here are identical to the normal registers.
- */
-static const ARMCPRegInfo gen_timer_ecv_cp_reginfo[] = {
-    { .name = "CNTVCTSS", .cp = 15, .crm = 14, .opc1 = 9,
-      .access = PL0_R, .type = ARM_CP_64BIT | ARM_CP_NO_RAW | ARM_CP_IO,
-      .accessfn = gt_vct_access,
-      .readfn = gt_virt_cnt_read, .resetfn = arm_cp_reset_ignore,
-    },
-    { .name = "CNTVCTSS_EL0", .state = ARM_CP_STATE_AA64,
-      .opc0 = 3, .opc1 = 3, .crn = 14, .crm = 0, .opc2 = 6,
-      .access = PL0_R, .type = ARM_CP_NO_RAW | ARM_CP_IO,
-      .accessfn = gt_vct_access, .readfn = gt_virt_cnt_read,
-    },
-    { .name = "CNTPCTSS", .cp = 15, .crm = 14, .opc1 = 8,
-      .access = PL0_R, .type = ARM_CP_64BIT | ARM_CP_NO_RAW | ARM_CP_IO,
-      .accessfn = gt_pct_access,
-      .readfn = gt_cnt_read, .resetfn = arm_cp_reset_ignore,
-    },
-    { .name = "CNTPCTSS_EL0", .state = ARM_CP_STATE_AA64,
-      .opc0 = 3, .opc1 = 3, .crn = 14, .crm = 0, .opc2 = 5,
-      .access = PL0_R, .type = ARM_CP_NO_RAW | ARM_CP_IO,
-      .accessfn = gt_pct_access, .readfn = gt_cnt_read,
-    },
-};
-
-static CPAccessResult gt_cntpoff_access(CPUARMState *env,
-                                        const ARMCPRegInfo *ri,
-                                        bool isread)
-{
-    if (arm_current_el(env) == 2 && !(env->cp15.scr_el3 & SCR_ECVEN)) {
-        return CP_ACCESS_TRAP_EL3;
-    }
-    return CP_ACCESS_OK;
-}
-
-static void gt_cntpoff_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                              uint64_t value)
-{
-    ARMCPU *cpu = env_archcpu(env);
-
-    trace_arm_gt_cntpoff_write(value);
-    raw_write(env, ri, value);
-    gt_recalc_timer(cpu, GTIMER_PHYS);
-}
-
-static const ARMCPRegInfo gen_timer_cntpoff_reginfo = {
-    .name = "CNTPOFF_EL2", .state = ARM_CP_STATE_AA64,
-    .opc0 = 3, .opc1 = 4, .crn = 14, .crm = 0, .opc2 = 6,
-    .access = PL2_RW, .type = ARM_CP_IO, .resetvalue = 0,
-    .accessfn = gt_cntpoff_access, .writefn = gt_cntpoff_write,
-    .nv2_redirect_offset = 0x1a8,
-    .fieldoffset = offsetof(CPUARMState, cp15.cntpoff_el2),
-};
 #else
 
 /*
@@ -3504,18 +3374,6 @@ static const ARMCPRegInfo generic_timer_cp_reginfo[] = {
     },
     { .name = "CNTVCT_EL0", .state = ARM_CP_STATE_AA64,
       .opc0 = 3, .opc1 = 3, .crn = 14, .crm = 0, .opc2 = 2,
-      .access = PL0_R, .type = ARM_CP_NO_RAW | ARM_CP_IO,
-      .readfn = gt_virt_cnt_read,
-    },
-};
-
-/*
- * CNTVCTSS_EL0 has the same trap conditions as CNTVCT_EL0, so it also
- * is exposed to userspace by Linux.
- */
-static const ARMCPRegInfo gen_timer_ecv_cp_reginfo[] = {
-    { .name = "CNTVCTSS_EL0", .state = ARM_CP_STATE_AA64,
-      .opc0 = 3, .opc1 = 3, .crn = 14, .crm = 0, .opc2 = 6,
       .access = PL0_R, .type = ARM_CP_NO_RAW | ARM_CP_IO,
       .readfn = gt_virt_cnt_read,
     },
@@ -6681,36 +6539,13 @@ static CPAccessResult e2h_access(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     if (arm_current_el(env) == 1) {
         /* This must be a FEAT_NV access */
+        /* TODO: FEAT_ECV will need to check CNTHCTL_EL2 here */
         return CP_ACCESS_OK;
     }
     if (!(arm_hcr_el2_eff(env) & HCR_E2H)) {
-        return CP_ACCESS_TRAP_UNCATEGORIZED;
+        return CP_ACCESS_TRAP;
     }
     return CP_ACCESS_OK;
-}
-
-static CPAccessResult access_el1nvpct(CPUARMState *env, const ARMCPRegInfo *ri,
-                                      bool isread)
-{
-    if (arm_current_el(env) == 1) {
-        /* This must be a FEAT_NV access with NVx == 101 */
-        if (FIELD_EX64(env->cp15.cnthctl_el2, CNTHCTL, EL1NVPCT)) {
-            return CP_ACCESS_TRAP_EL2;
-        }
-    }
-    return e2h_access(env, ri, isread);
-}
-
-static CPAccessResult access_el1nvvct(CPUARMState *env, const ARMCPRegInfo *ri,
-                                      bool isread)
-{
-    if (arm_current_el(env) == 1) {
-        /* This must be a FEAT_NV access with NVx == 101 */
-        if (FIELD_EX64(env->cp15.cnthctl_el2, CNTHCTL, EL1NVVCT)) {
-            return CP_ACCESS_TRAP_EL2;
-        }
-    }
-    return e2h_access(env, ri, isread);
 }
 
 /* Test if system register redirection is to occur in the current state.  */
@@ -8006,7 +7841,7 @@ static void dccvap_writefn(CPUARMState *env, const ARMCPRegInfo *opaque,
     uint64_t vaddr_in = (uint64_t) value;
     uint64_t vaddr = vaddr_in & ~(dline_size - 1);
     void *haddr;
-    int mem_idx = arm_env_mmu_index(env);
+    int mem_idx = cpu_mmu_index(env, false);
 
     /* This won't be crossing page boundaries */
     haddr = probe_read(env, vaddr, dline_size, mem_idx, GETPC());
@@ -8538,14 +8373,14 @@ static const ARMCPRegInfo vhe_reginfo[] = {
     { .name = "CNTP_CTL_EL02", .state = ARM_CP_STATE_AA64,
       .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 2, .opc2 = 1,
       .type = ARM_CP_IO | ARM_CP_ALIAS,
-      .access = PL2_RW, .accessfn = access_el1nvpct,
+      .access = PL2_RW, .accessfn = e2h_access,
       .nv2_redirect_offset = 0x180 | NV2_REDIR_NO_NV1,
       .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_PHYS].ctl),
       .writefn = gt_phys_ctl_write, .raw_writefn = raw_write },
     { .name = "CNTV_CTL_EL02", .state = ARM_CP_STATE_AA64,
       .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 3, .opc2 = 1,
       .type = ARM_CP_IO | ARM_CP_ALIAS,
-      .access = PL2_RW, .accessfn = access_el1nvvct,
+      .access = PL2_RW, .accessfn = e2h_access,
       .nv2_redirect_offset = 0x170 | NV2_REDIR_NO_NV1,
       .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_VIRT].ctl),
       .writefn = gt_virt_ctl_write, .raw_writefn = raw_write },
@@ -8564,14 +8399,14 @@ static const ARMCPRegInfo vhe_reginfo[] = {
       .type = ARM_CP_IO | ARM_CP_ALIAS,
       .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_PHYS].cval),
       .nv2_redirect_offset = 0x178 | NV2_REDIR_NO_NV1,
-      .access = PL2_RW, .accessfn = access_el1nvpct,
+      .access = PL2_RW, .accessfn = e2h_access,
       .writefn = gt_phys_cval_write, .raw_writefn = raw_write },
     { .name = "CNTV_CVAL_EL02", .state = ARM_CP_STATE_AA64,
       .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 3, .opc2 = 2,
       .type = ARM_CP_IO | ARM_CP_ALIAS,
       .nv2_redirect_offset = 0x168 | NV2_REDIR_NO_NV1,
       .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_VIRT].cval),
-      .access = PL2_RW, .accessfn = access_el1nvvct,
+      .access = PL2_RW, .accessfn = e2h_access,
       .writefn = gt_virt_cval_write, .raw_writefn = raw_write },
 #endif
 };
@@ -9062,7 +8897,6 @@ void register_cp_regs_for_features(ARMCPU *cpu)
                                R_ID_AA64ZFR0_AES_MASK |
                                R_ID_AA64ZFR0_BITPERM_MASK |
                                R_ID_AA64ZFR0_BFLOAT16_MASK |
-                               R_ID_AA64ZFR0_B16B16_MASK |
                                R_ID_AA64ZFR0_SHA3_MASK |
                                R_ID_AA64ZFR0_SM4_MASK |
                                R_ID_AA64ZFR0_I8MM_MASK |
@@ -9357,14 +9191,6 @@ void register_cp_regs_for_features(ARMCPU *cpu)
     if (arm_feature(env, ARM_FEATURE_GENERIC_TIMER)) {
         define_arm_cp_regs(cpu, generic_timer_cp_reginfo);
     }
-    if (cpu_isar_feature(aa64_ecv_traps, cpu)) {
-        define_arm_cp_regs(cpu, gen_timer_ecv_cp_reginfo);
-    }
-#ifndef CONFIG_USER_ONLY
-    if (cpu_isar_feature(aa64_ecv, cpu)) {
-        define_one_arm_cp_reg(cpu, &gen_timer_cntpoff_reginfo);
-    }
-#endif
     if (arm_feature(env, ARM_FEATURE_VAPA)) {
         ARMCPRegInfo vapa_cp_reginfo[] = {
             { .name = "PAR", .cp = 15, .crn = 7, .crm = 4, .opc1 = 0, .opc2 = 0,
@@ -9693,7 +9519,7 @@ void register_cp_regs_for_features(ARMCPU *cpu)
          * AArch64 cores we might need to add a specific feature flag
          * to indicate cores with "flavour 2" CBAR.
          */
-        if (arm_feature(env, ARM_FEATURE_V8)) {
+        if (arm_feature(env, ARM_FEATURE_AARCH64)) {
             /* 32 bit view is [31:18] 0...0 [43:32]. */
             uint32_t cbar32 = (extract64(cpu->reset_cbar, 18, 14) << 18)
                 | extract64(cpu->reset_cbar, 32, 12);
@@ -11189,24 +11015,6 @@ static void arm_cpu_do_interrupt_aarch32(CPUState *cs)
     }
 
     if (env->exception.target_el == 2) {
-        /* Debug exceptions are reported differently on AArch32 */
-        switch (syn_get_ec(env->exception.syndrome)) {
-        case EC_BREAKPOINT:
-        case EC_BREAKPOINT_SAME_EL:
-        case EC_AA32_BKPT:
-        case EC_VECTORCATCH:
-            env->exception.syndrome = syn_insn_abort(arm_current_el(env) == 2,
-                                                     0, 0, 0x22);
-            break;
-        case EC_WATCHPOINT:
-            env->exception.syndrome = syn_set_ec(env->exception.syndrome,
-                                                 EC_DATAABORT);
-            break;
-        case EC_WATCHPOINT_SAME_EL:
-            env->exception.syndrome = syn_set_ec(env->exception.syndrome,
-                                                 EC_DATAABORT_SAME_EL);
-            break;
-        }
         arm_cpu_do_interrupt_aarch32_hyp(cs);
         return;
     }

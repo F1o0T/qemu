@@ -1149,7 +1149,6 @@ static void virtio_scsi_drained_begin(SCSIBus *bus)
 static void virtio_scsi_drained_end(SCSIBus *bus)
 {
     VirtIOSCSI *s = container_of(bus, VirtIOSCSI, bus);
-    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(s);
     VirtIODevice *vdev = VIRTIO_DEVICE(s);
     uint32_t total_queues = VIRTIO_SCSI_VQ_NUM_FIXED +
                             s->parent_obj.conf.num_queues;
@@ -1167,11 +1166,7 @@ static void virtio_scsi_drained_end(SCSIBus *bus)
 
     for (uint32_t i = 0; i < total_queues; i++) {
         VirtQueue *vq = virtio_get_queue(vdev, i);
-        if (vq == vs->event_vq) {
-            virtio_queue_aio_attach_host_notifier_no_poll(vq, s->ctx);
-        } else {
-            virtio_queue_aio_attach_host_notifier(vq, s->ctx);
-        }
+        virtio_queue_aio_attach_host_notifier(vq, s->ctx);
     }
 }
 

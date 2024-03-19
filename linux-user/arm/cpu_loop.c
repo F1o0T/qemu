@@ -263,7 +263,7 @@ static bool insn_is_linux_bkpt(uint32_t opcode, bool is_thumb)
 
 static bool emulate_arm_fpa11(CPUARMState *env, uint32_t opcode)
 {
-    TaskState *ts = get_task_state(env_cpu(env));
+    TaskState *ts = env_cpu(env)->opaque;
     int rc = EmulateAll(opcode, &ts->fpa, env);
     int raise, enabled;
 
@@ -514,7 +514,7 @@ void cpu_loop(CPUARMState *env)
 void target_cpu_copy_regs(CPUArchState *env, struct target_pt_regs *regs)
 {
     CPUState *cpu = env_cpu(env);
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts = cpu->opaque;
     struct image_info *info = ts->info;
     int i;
 

@@ -45,5 +45,6 @@ int (*qemu_main)(void) = qemu_default_main;
 int main(int argc, char **argv)
 {
     qemu_init(argc, argv);
-    return qemu_main();
+    int ret = qemu_main();
+    return ret; 
 }

@@ -41,7 +41,7 @@
 #include "qemu/cutils.h"
 #include "sysemu/replay.h"
 #include "sysemu/runstate.h"
-#include "ide-internal.h"
+#include "hw/ide/internal.h"
 #include "trace.h"
 
 /* These values were based on a Seagate ST3500418AS but have been modified
@@ -1059,7 +1059,7 @@ static void ide_sector_write_cb(void *opaque, int ret)
                            ide_sector_write);
     }
 
-    if (s->win2k_install_hack && ((++s->irq_count % 16) == 0)) {
+    if (win2k_install_hack && ((++s->irq_count % 16) == 0)) {
         /* It seems there is a bug in the Windows 2000 installer HDD
            IDE driver which fills the disk with empty logs when the
            IDE write IRQ comes too early. This hack tries to correct
@@ -2589,21 +2589,24 @@ static const BlockDevOps ide_hd_block_ops = {
     .resize_cb = ide_resize_cb,
 };
 
-int ide_init_drive(IDEState *s, IDEDevice *dev, IDEDriveKind kind, Error **errp)
+int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
+                   const char *version, const char *serial, const char *model,
+                   uint64_t wwn,
+                   uint32_t cylinders, uint32_t heads, uint32_t secs,
+                   int chs_trans, Error **errp)
 {
     uint64_t nb_sectors;
 
-    s->blk = dev->conf.blk;
+    s->blk = blk;
     s->drive_kind = kind;
 
-    blk_get_geometry(s->blk, &nb_sectors);
-    s->win2k_install_hack = dev->win2k_install_hack;
-    s->cylinders = dev->conf.cyls;
-    s->heads = s->drive_heads = dev->conf.heads;
-    s->sectors = s->drive_sectors = dev->conf.secs;
-    s->chs_trans = dev->chs_trans;
+    blk_get_geometry(blk, &nb_sectors);
+    s->cylinders = cylinders;
+    s->heads = s->drive_heads = heads;
+    s->sectors = s->drive_sectors = secs;
+    s->chs_trans = chs_trans;
     s->nb_sectors = nb_sectors;
-    s->wwn = dev->wwn;
+    s->wwn = wwn;
     /* The SMART values should be preserved across power cycles
        but they aren't.  */
     s->smart_enabled = 1;
@@ -2611,26 +2614,26 @@ int ide_init_drive(IDEState *s, IDEDevice *dev, IDEDriveKind kind, Error **errp)
     s->smart_errors = 0;
     s->smart_selftest_count = 0;
     if (kind == IDE_CD) {
-        blk_set_dev_ops(s->blk, &ide_cd_block_ops, s);
+        blk_set_dev_ops(blk, &ide_cd_block_ops, s);
     } else {
         if (!blk_is_inserted(s->blk)) {
             error_setg(errp, "Device needs media, but drive is empty");
             return -1;
         }
-        if (!blk_is_writable(s->blk)) {
+        if (!blk_is_writable(blk)) {
             error_setg(errp, "Can't use a read-only drive");
             return -1;
         }
-        blk_set_dev_ops(s->blk, &ide_hd_block_ops, s);
+        blk_set_dev_ops(blk, &ide_hd_block_ops, s);
     }
-    if (dev->serial) {
-        pstrcpy(s->drive_serial_str, sizeof(s->drive_serial_str), dev->serial);
+    if (serial) {
+        pstrcpy(s->drive_serial_str, sizeof(s->drive_serial_str), serial);
     } else {
         snprintf(s->drive_serial_str, sizeof(s->drive_serial_str),
                  "QM%05d", s->drive_serial);
     }
-    if (dev->model) {
-        pstrcpy(s->drive_model_str, sizeof(s->drive_model_str), dev->model);
+    if (model) {
+        pstrcpy(s->drive_model_str, sizeof(s->drive_model_str), model);
     } else {
         switch (kind) {
         case IDE_CD:
@@ -2645,14 +2648,14 @@ int ide_init_drive(IDEState *s, IDEDevice *dev, IDEDriveKind kind, Error **errp)
         }
     }
 
-    if (dev->version) {
-        pstrcpy(s->version, sizeof(s->version), dev->version);
+    if (version) {
+        pstrcpy(s->version, sizeof(s->version), version);
     } else {
         pstrcpy(s->version, sizeof(s->version), qemu_hw_version());
     }
 
     ide_reset(s);
-    blk_iostatus_enable(s->blk);
+    blk_iostatus_enable(blk);
     return 0;
 }
 

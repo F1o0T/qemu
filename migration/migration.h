@@ -26,7 +26,6 @@
 #include "qom/object.h"
 #include "postcopy-ram.h"
 #include "sysemu/runstate.h"
-#include "migration/misc.h"
 
 struct PostcopyBlocktimeContext;
 
@@ -349,6 +348,8 @@ struct MigrationState {
 
     /* Flag set once the migration has been asked to enter postcopy */
     bool start_postcopy;
+    /* Flag set after postcopy has sent the device state */
+    bool postcopy_after_devices;
 
     /* Flag set once the migration thread is running (and needs joining) */
     bool migration_thread_running;
@@ -480,8 +481,8 @@ bool migrate_has_error(MigrationState *s);
 
 void migrate_fd_connect(MigrationState *s, Error *error_in);
 
-int migration_call_notifiers(MigrationState *s, MigrationEventType type,
-                             Error **errp);
+bool migration_is_setup_or_active(int state);
+bool migration_is_running(int state);
 
 int migrate_init(MigrationState *s, Error **errp);
 bool migration_is_blocked(Error **errp);
@@ -489,8 +490,6 @@ bool migration_is_blocked(Error **errp);
 bool migration_in_postcopy(void);
 bool migration_postcopy_is_alive(int state);
 MigrationState *migrate_get_current(void);
-bool migration_has_failed(MigrationState *);
-bool migrate_mode_is_cpr(MigrationState *);
 
 uint64_t ram_get_total_transferred_pages(void);
 
@@ -543,5 +542,7 @@ int migration_rp_wait(MigrationState *s);
  * to remember the target is always the migration thread.
  */
 void migration_rp_kick(MigrationState *s);
+
+int migration_stop_vm(RunState state);
 
 #endif

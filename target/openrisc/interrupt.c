@@ -29,7 +29,8 @@
 
 void openrisc_cpu_do_interrupt(CPUState *cs)
 {
-    CPUOpenRISCState *env = cpu_env(cs);
+    OpenRISCCPU *cpu = OPENRISC_CPU(cs);
+    CPUOpenRISCState *env = &cpu->env;
     int exception = cs->exception_index;
 
     env->epcr = env->pc;
@@ -104,7 +105,8 @@ void openrisc_cpu_do_interrupt(CPUState *cs)
 
 bool openrisc_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
 {
-    CPUOpenRISCState *env = cpu_env(cs);
+    OpenRISCCPU *cpu = OPENRISC_CPU(cs);
+    CPUOpenRISCState *env = &cpu->env;
     int idx = -1;
 
     if ((interrupt_request & CPU_INTERRUPT_HARD) && (env->sr & SR_IEE)) {

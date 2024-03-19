@@ -245,7 +245,6 @@ static bool should_validate_capability(int capability)
     /* Validate only new capabilities to keep compatibility. */
     switch (capability) {
     case MIGRATION_CAPABILITY_X_IGNORE_SHARED:
-    case MIGRATION_CAPABILITY_MAPPED_RAM:
         return true;
     default:
         return false;
@@ -1317,7 +1316,7 @@ void qemu_savevm_state_setup(QEMUFile *f)
     MigrationState *ms = migrate_get_current();
     SaveStateEntry *se;
     Error *local_err = NULL;
-    int ret = 0;
+    int ret;
 
     json_writer_int64(ms->vmdesc, "page_size", qemu_target_page_size());
     json_writer_start_array(ms->vmdesc, "devices");
@@ -1349,10 +1348,6 @@ void qemu_savevm_state_setup(QEMUFile *f)
             qemu_file_set_error(f, ret);
             break;
         }
-    }
-
-    if (ret) {
-        return;
     }
 
     if (precopy_notify(PRECOPY_NOTIFY_SETUP, &local_err)) {
@@ -1394,8 +1389,7 @@ int qemu_savevm_state_resume_prepare(MigrationState *s)
 int qemu_savevm_state_iterate(QEMUFile *f, bool postcopy)
 {
     SaveStateEntry *se;
-    bool all_finished = true;
-    int ret;
+    int ret = 1;
 
     trace_savevm_state_iterate();
     QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {
@@ -1436,12 +1430,16 @@ int qemu_savevm_state_iterate(QEMUFile *f, bool postcopy)
                          "%d(%s): %d",
                          se->section_id, se->idstr, ret);
             qemu_file_set_error(f, ret);
-            return ret;
-        } else if (!ret) {
-            all_finished = false;
+        }
+        if (ret <= 0) {
+            /* Do not proceed to the next vmstate before this one reported
+               completion of the current stage. This serializes the migration
+               and reduces the probability that a faster changing state is
+               synchronized over and over again. */
+            break;
         }
     }
-    return all_finished;
+    return ret;
 }
 
 static bool should_send_vmdesc(void)
@@ -1706,7 +1704,7 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
     MigrationState *ms = migrate_get_current();
     MigrationStatus status;
 
-    if (migration_is_running()) {
+    if (migration_is_running(ms->state)) {
         error_setg(errp, QERR_MIGRATION_ACTIVE);
         return -EINVAL;
     }

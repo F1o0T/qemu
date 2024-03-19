@@ -1528,7 +1528,7 @@ static void openrisc_tr_init_disas_context(DisasContextBase *dcb, CPUState *cs)
     CPUOpenRISCState *env = cpu_env(cs);
     int bound;
 
-    dc->mem_idx = cpu_mmu_index(cs, false);
+    dc->mem_idx = cpu_mmu_index(env, false);
     dc->tb_flags = dc->base.tb->flags;
     dc->delayed_branch = (dc->tb_flags & TB_FLAGS_DFLAG) != 0;
     dc->cpucfgr = env->cpucfgr;
@@ -1564,7 +1564,8 @@ static void openrisc_tr_insn_start(DisasContextBase *dcbase, CPUState *cs)
 static void openrisc_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
-    uint32_t insn = translator_ldl(cpu_env(cs), &dc->base, dc->base.pc_next);
+    OpenRISCCPU *cpu = OPENRISC_CPU(cs);
+    uint32_t insn = translator_ldl(&cpu->env, &dc->base, dc->base.pc_next);
 
     if (!decode(dc, insn)) {
         gen_illegal_exception(dc);
@@ -1667,7 +1668,8 @@ void gen_intermediate_code(CPUState *cs, TranslationBlock *tb, int *max_insns,
 
 void openrisc_cpu_dump_state(CPUState *cs, FILE *f, int flags)
 {
-    CPUOpenRISCState *env = cpu_env(cs);
+    OpenRISCCPU *cpu = OPENRISC_CPU(cs);
+    CPUOpenRISCState *env = &cpu->env;
     int i;
 
     qemu_fprintf(f, "PC=%08x\n", env->pc);

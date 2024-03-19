@@ -43,7 +43,6 @@ static void iommufd_backend_finalize(Object *obj)
 
 static void iommufd_backend_set_fd(Object *obj, const char *str, Error **errp)
 {
-    ERRP_GUARD();
     IOMMUFDBackend *be = IOMMUFD_BACKEND(obj);
     int fd = -1;
 

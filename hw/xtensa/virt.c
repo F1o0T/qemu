@@ -102,7 +102,9 @@ static void create_pcie(MachineState *ms, CPUXtensaState *env, int irq_base,
 
     pci = PCI_HOST_BRIDGE(dev);
     if (pci->bus) {
-        pci_init_nic_devices(pci->bus, mc->default_nic);
+        for (i = 0; i < nb_nics; i++) {
+            pci_nic_init_nofail(&nd_table[i], pci->bus, mc->default_nic, NULL);
+        }
     }
 }
 

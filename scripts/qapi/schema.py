@@ -95,6 +95,10 @@ class QAPISchemaEntity:
             for f in self.features:
                 doc.connect_feature(f)
 
+    def check_doc(self):
+        if self.doc:
+            self.doc.check()
+
     def _set_module(self, schema, info):
         assert self._checked
         fname = info.fname if info else QAPISchemaModule.BUILTIN_MODULE_NAME
@@ -1219,10 +1223,9 @@ class QAPISchema:
         for ent in self._entity_list:
             ent.check(self)
             ent.connect_doc()
+            ent.check_doc()
         for ent in self._entity_list:
             ent.set_module(self)
-        for doc in self.docs:
-            doc.check()
 
     def visit(self, visitor):
         visitor.visit_begin(self)

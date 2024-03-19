@@ -773,7 +773,7 @@ static int cpu_pre_load(void *opaque)
     env->irq_line_state = UINT32_MAX;
 
     if (!kvm_enabled()) {
-        pmu_op_start(env);
+        pmu_op_start(&cpu->env);
     }
 
     return 0;
@@ -871,11 +871,11 @@ static int cpu_post_load(void *opaque, int version_id)
     }
 
     if (!kvm_enabled()) {
-        pmu_op_finish(env);
+        pmu_op_finish(&cpu->env);
     }
 
     if (tcg_enabled()) {
-        arm_rebuild_hflags(env);
+        arm_rebuild_hflags(&cpu->env);
     }
 
     return 0;

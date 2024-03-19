@@ -120,7 +120,7 @@ typedef struct CPUArchId {
     uint64_t arch_id;
     int64_t vcpus_count;
     CpuInstanceProperties props;
-    CPUState *cpu;
+    Object *cpu;
     const char *type;
 } CPUArchId;
 

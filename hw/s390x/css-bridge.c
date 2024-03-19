@@ -56,7 +56,7 @@ static void ccw_device_unplug(HotplugHandler *hotplug_dev,
     qdev_unrealize(dev);
 }
 
-static void virtual_css_bus_reset_hold(Object *obj)
+static void virtual_css_bus_reset(BusState *qbus)
 {
     /* This should actually be modelled via the generic css */
     css_reset();
@@ -81,9 +81,8 @@ static char *virtual_css_bus_get_dev_path(DeviceState *dev)
 static void virtual_css_bus_class_init(ObjectClass *klass, void *data)
 {
     BusClass *k = BUS_CLASS(klass);
-    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
-    rc->phases.hold = virtual_css_bus_reset_hold;
+    k->reset = virtual_css_bus_reset;
     k->get_dev_path = virtual_css_bus_get_dev_path;
 }
 

@@ -95,7 +95,8 @@ enum {
 
 void tricore_cpu_dump_state(CPUState *cs, FILE *f, int flags)
 {
-    CPUTriCoreState *env = cpu_env(cs);
+    TriCoreCPU *cpu = TRICORE_CPU(cs);
+    CPUTriCoreState *env = &cpu->env;
     uint32_t psw;
     int i;
 
@@ -8354,7 +8355,7 @@ static void tricore_tr_init_disas_context(DisasContextBase *dcbase,
 {
     DisasContext *ctx = container_of(dcbase, DisasContext, base);
     CPUTriCoreState *env = cpu_env(cs);
-    ctx->mem_idx = cpu_mmu_index(cs, false);
+    ctx->mem_idx = cpu_mmu_index(env, false);
 
     uint32_t tb_flags = (uint32_t)ctx->base.tb->flags;
     ctx->priv = FIELD_EX32(tb_flags, TB_FLAGS, PRIV);

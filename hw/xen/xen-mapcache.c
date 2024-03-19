@@ -22,6 +22,16 @@
 #include "trace.h"
 
 
+//#define MAPCACHE_DEBUG
+
+#ifdef MAPCACHE_DEBUG
+#  define DPRINTF(fmt, ...) do { \
+    fprintf(stderr, "xen_mapcache: " fmt, ## __VA_ARGS__); \
+} while (0)
+#else
+#  define DPRINTF(fmt, ...) do { } while (0)
+#endif
+
 #if HOST_LONG_BITS == 32
 #  define MCACHE_BUCKET_SHIFT 16
 #  define MCACHE_MAX_SIZE     (1UL<<31) /* 2GB Cap */
@@ -135,7 +145,8 @@ void xen_map_cache_init(phys_offset_to_gaddr_t f, void *opaque)
 
     size = mapcache->nr_buckets * sizeof (MapCacheEntry);
     size = (size + XC_PAGE_SIZE - 1) & ~(XC_PAGE_SIZE - 1);
-    trace_xen_map_cache_init(mapcache->nr_buckets, size);
+    DPRINTF("%s, nr_buckets = %lx size %lu\n", __func__,
+            mapcache->nr_buckets, size);
     mapcache->entry = g_malloc0(size);
 }
 
@@ -275,9 +286,7 @@ tryagain:
         test_bits(address_offset >> XC_PAGE_SHIFT,
                   test_bit_size >> XC_PAGE_SHIFT,
                   mapcache->last_entry->valid_mapping)) {
-        trace_xen_map_cache_return(
-            mapcache->last_entry->vaddr_base + address_offset
-        );
+        trace_xen_map_cache_return(mapcache->last_entry->vaddr_base + address_offset);
         return mapcache->last_entry->vaddr_base + address_offset;
     }
 
@@ -347,8 +356,9 @@ tryagain:
         MapCacheRev *reventry = g_new0(MapCacheRev, 1);
         entry->lock++;
         if (entry->lock == 0) {
-            error_report("mapcache entry lock overflow: "HWADDR_FMT_plx" -> %p",
-                         entry->paddr_index, entry->vaddr_base);
+            fprintf(stderr,
+                    "mapcache entry lock overflow: "HWADDR_FMT_plx" -> %p\n",
+                    entry->paddr_index, entry->vaddr_base);
             abort();
         }
         reventry->dma = dma;
@@ -358,9 +368,7 @@ tryagain:
         QTAILQ_INSERT_HEAD(&mapcache->locked_entries, reventry, next);
     }
 
-    trace_xen_map_cache_return(
-        mapcache->last_entry->vaddr_base + address_offset
-    );
+    trace_xen_map_cache_return(mapcache->last_entry->vaddr_base + address_offset);
     return mapcache->last_entry->vaddr_base + address_offset;
 }
 
@@ -394,10 +402,10 @@ ram_addr_t xen_ram_addr_from_mapcache(void *ptr)
         }
     }
     if (!found) {
-        trace_xen_ram_addr_from_mapcache_not_found(ptr);
+        fprintf(stderr, "%s, could not find %p\n", __func__, ptr);
         QTAILQ_FOREACH(reventry, &mapcache->locked_entries, next) {
-            trace_xen_ram_addr_from_mapcache_found(reventry->paddr_index,
-                                                   reventry->vaddr_req);
+            DPRINTF("   "HWADDR_FMT_plx" -> %p is present\n", reventry->paddr_index,
+                    reventry->vaddr_req);
         }
         abort();
         return 0;
@@ -408,7 +416,7 @@ ram_addr_t xen_ram_addr_from_mapcache(void *ptr)
         entry = entry->next;
     }
     if (!entry) {
-        trace_xen_ram_addr_from_mapcache_not_in_cache(ptr);
+        DPRINTF("Trying to find address %p that is not in the mapcache!\n", ptr);
         raddr = 0;
     } else {
         raddr = (reventry->paddr_index << MCACHE_BUCKET_SHIFT) +
@@ -435,12 +443,9 @@ static void xen_invalidate_map_cache_entry_unlocked(uint8_t *buffer)
         }
     }
     if (!found) {
-        trace_xen_invalidate_map_cache_entry_unlocked_not_found(buffer);
+        DPRINTF("%s, could not find %p\n", __func__, buffer);
         QTAILQ_FOREACH(reventry, &mapcache->locked_entries, next) {
-            trace_xen_invalidate_map_cache_entry_unlocked_found(
-                reventry->paddr_index,
-                reventry->vaddr_req
-            );
+            DPRINTF("   "HWADDR_FMT_plx" -> %p is present\n", reventry->paddr_index, reventry->vaddr_req);
         }
         return;
     }
@@ -458,7 +463,7 @@ static void xen_invalidate_map_cache_entry_unlocked(uint8_t *buffer)
         entry = entry->next;
     }
     if (!entry) {
-        trace_xen_invalidate_map_cache_entry_unlocked_miss(buffer);
+        DPRINTF("Trying to unmap address %p that is not in the mapcache!\n", buffer);
         return;
     }
     entry->lock--;
@@ -476,37 +481,11 @@ static void xen_invalidate_map_cache_entry_unlocked(uint8_t *buffer)
     g_free(entry);
 }
 
-typedef struct XenMapCacheData {
-    Coroutine *co;
-    uint8_t *buffer;
-} XenMapCacheData;
-
-static void xen_invalidate_map_cache_entry_bh(void *opaque)
+void xen_invalidate_map_cache_entry(uint8_t *buffer)
 {
-    XenMapCacheData *data = opaque;
-
     mapcache_lock();
-    xen_invalidate_map_cache_entry_unlocked(data->buffer);
+    xen_invalidate_map_cache_entry_unlocked(buffer);
     mapcache_unlock();
-
-    aio_co_wake(data->co);
-}
-
-void coroutine_mixed_fn xen_invalidate_map_cache_entry(uint8_t *buffer)
-{
-    if (qemu_in_coroutine()) {
-        XenMapCacheData data = {
-            .co = qemu_coroutine_self(),
-            .buffer = buffer,
-        };
-        aio_bh_schedule_oneshot(qemu_get_current_aio_context(),
-                                xen_invalidate_map_cache_entry_bh, &data);
-        qemu_coroutine_yield();
-    } else {
-        mapcache_lock();
-        xen_invalidate_map_cache_entry_unlocked(buffer);
-        mapcache_unlock();
-    }
 }
 
 void xen_invalidate_map_cache(void)
@@ -523,8 +502,9 @@ void xen_invalidate_map_cache(void)
         if (!reventry->dma) {
             continue;
         }
-        trace_xen_invalidate_map_cache(reventry->paddr_index,
-                                       reventry->vaddr_req);
+        fprintf(stderr, "Locked DMA mapping while invalidating mapcache!"
+                " "HWADDR_FMT_plx" -> %p is present\n",
+                reventry->paddr_index, reventry->vaddr_req);
     }
 
     for (i = 0; i < mapcache->nr_buckets; i++) {
@@ -582,23 +562,24 @@ static uint8_t *xen_replace_cache_entry_unlocked(hwaddr old_phys_addr,
         entry = entry->next;
     }
     if (!entry) {
-        trace_xen_replace_cache_entry_unlocked(old_phys_addr);
+        DPRINTF("Trying to update an entry for "HWADDR_FMT_plx \
+                "that is not in the mapcache!\n", old_phys_addr);
         return NULL;
     }
 
     address_index  = new_phys_addr >> MCACHE_BUCKET_SHIFT;
     address_offset = new_phys_addr & (MCACHE_BUCKET_SIZE - 1);
 
-    trace_xen_replace_cache_entry_dummy(old_phys_addr, new_phys_addr);
+    fprintf(stderr, "Replacing a dummy mapcache entry for "HWADDR_FMT_plx \
+            " with "HWADDR_FMT_plx"\n", old_phys_addr, new_phys_addr);
 
     xen_remap_bucket(entry, entry->vaddr_base,
                      cache_size, address_index, false);
     if (!test_bits(address_offset >> XC_PAGE_SHIFT,
                 test_bit_size >> XC_PAGE_SHIFT,
                 entry->valid_mapping)) {
-        trace_xen_replace_cache_entry_unlocked_could_not_update_entry(
-            old_phys_addr
-        );
+        DPRINTF("Unable to update a mapcache entry for "HWADDR_FMT_plx"!\n",
+                old_phys_addr);
         return NULL;
     }
 

@@ -64,11 +64,6 @@ static bool alpha_cpu_has_work(CPUState *cs)
                                     | CPU_INTERRUPT_MCHK);
 }
 
-static int alpha_cpu_mmu_index(CPUState *cs, bool ifetch)
-{
-    return alpha_env_mmu_index(cpu_env(cs));
-}
-
 static void alpha_cpu_disas_set_info(CPUState *cpu, disassemble_info *info)
 {
     info->mach = bfd_mach_alpha_ev6;
@@ -135,27 +130,40 @@ static ObjectClass *alpha_cpu_class_by_name(const char *cpu_model)
 
 static void ev4_cpu_initfn(Object *obj)
 {
-    cpu_env(CPU(obj))->implver = IMPLVER_2106x;
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
+
+    env->implver = IMPLVER_2106x;
 }
 
 static void ev5_cpu_initfn(Object *obj)
 {
-    cpu_env(CPU(obj))->implver = IMPLVER_21164;
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
+
+    env->implver = IMPLVER_21164;
 }
 
 static void ev56_cpu_initfn(Object *obj)
 {
-    cpu_env(CPU(obj))->amask |= AMASK_BWX;
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
+
+    env->amask |= AMASK_BWX;
 }
 
 static void pca56_cpu_initfn(Object *obj)
 {
-    cpu_env(CPU(obj))->amask |= AMASK_MVI;
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
+
+    env->amask |= AMASK_MVI;
 }
 
 static void ev6_cpu_initfn(Object *obj)
 {
-    CPUAlphaState *env = cpu_env(CPU(obj));
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
 
     env->implver = IMPLVER_21264;
     env->amask = AMASK_BWX | AMASK_FIX | AMASK_MVI | AMASK_TRAP;
@@ -163,12 +171,16 @@ static void ev6_cpu_initfn(Object *obj)
 
 static void ev67_cpu_initfn(Object *obj)
 {
-    cpu_env(CPU(obj))->amask |= AMASK_CIX | AMASK_PREFETCH;
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
+
+    env->amask |= AMASK_CIX | AMASK_PREFETCH;
 }
 
 static void alpha_cpu_initfn(Object *obj)
 {
-    CPUAlphaState *env = cpu_env(CPU(obj));
+    AlphaCPU *cpu = ALPHA_CPU(obj);
+    CPUAlphaState *env = &cpu->env;
 
     env->lock_addr = -1;
 #if defined(CONFIG_USER_ONLY)
@@ -218,7 +230,6 @@ static void alpha_cpu_class_init(ObjectClass *oc, void *data)
 
     cc->class_by_name = alpha_cpu_class_by_name;
     cc->has_work = alpha_cpu_has_work;
-    cc->mmu_index = alpha_cpu_mmu_index;
     cc->dump_state = alpha_cpu_dump_state;
     cc->set_pc = alpha_cpu_set_pc;
     cc->get_pc = alpha_cpu_get_pc;

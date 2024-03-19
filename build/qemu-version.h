@@ -1,0 +1,2 @@
+#define QEMU_PKGVERSION "v8.2.0-952-g14639717bf-dirty"
+#define QEMU_FULL_VERSION "8.2.50 (v8.2.0-952-g14639717bf-dirty)"

@@ -651,17 +651,16 @@ void page_protect(tb_page_addr_t address)
 {
     PageFlagsNode *p;
     target_ulong start, last;
-    int host_page_size = qemu_real_host_page_size();
     int prot;
 
     assert_memory_lock();
 
-    if (host_page_size <= TARGET_PAGE_SIZE) {
+    if (qemu_host_page_size <= TARGET_PAGE_SIZE) {
         start = address & TARGET_PAGE_MASK;
         last = start + TARGET_PAGE_SIZE - 1;
     } else {
-        start = address & -host_page_size;
-        last = start + host_page_size - 1;
+        start = address & qemu_host_page_mask;
+        last = start + qemu_host_page_size - 1;
     }
 
     p = pageflags_find(start, last);
@@ -672,7 +671,7 @@ void page_protect(tb_page_addr_t address)
 
     if (unlikely(p->itree.last < last)) {
         /* More than one protection region covers the one host page. */
-        assert(TARGET_PAGE_SIZE < host_page_size);
+        assert(TARGET_PAGE_SIZE < qemu_host_page_size);
         while ((p = pageflags_next(p, start, last)) != NULL) {
             prot |= p->flags;
         }
@@ -680,7 +679,7 @@ void page_protect(tb_page_addr_t address)
 
     if (prot & PAGE_WRITE) {
         pageflags_set_clear(start, last, 0, PAGE_WRITE);
-        mprotect(g2h_untagged(start), last - start + 1,
+        mprotect(g2h_untagged(start), qemu_host_page_size,
                  prot & (PAGE_READ | PAGE_EXEC) ? PROT_READ : PROT_NONE);
     }
 }
@@ -726,19 +725,18 @@ int page_unprotect(target_ulong address, uintptr_t pc)
         }
 #endif
     } else {
-        int host_page_size = qemu_real_host_page_size();
         target_ulong start, len, i;
         int prot;
 
-        if (host_page_size <= TARGET_PAGE_SIZE) {
+        if (qemu_host_page_size <= TARGET_PAGE_SIZE) {
             start = address & TARGET_PAGE_MASK;
             len = TARGET_PAGE_SIZE;
             prot = p->flags | PAGE_WRITE;
             pageflags_set_clear(start, start + len - 1, PAGE_WRITE, 0);
             current_tb_invalidated = tb_invalidate_phys_page_unwind(start, pc);
         } else {
-            start = address & -host_page_size;
-            len = host_page_size;
+            start = address & qemu_host_page_mask;
+            len = qemu_host_page_size;
             prot = 0;
 
             for (i = 0; i < len; i += TARGET_PAGE_SIZE) {
@@ -864,7 +862,7 @@ tb_page_addr_t get_page_addr_code_hostp(CPUArchState *env, vaddr addr,
 typedef struct TargetPageDataNode {
     struct rcu_head rcu;
     IntervalTreeNode itree;
-    char data[] __attribute__((aligned));
+    char data[TPD_PAGES][TARGET_PAGE_DATA_SIZE] __attribute__((aligned));
 } TargetPageDataNode;
 
 static IntervalTreeRoot targetdata_root;
@@ -902,8 +900,7 @@ void page_reset_target_data(target_ulong start, target_ulong last)
         n_last = MIN(last, n->last);
         p_len = (n_last + 1 - n_start) >> TARGET_PAGE_BITS;
 
-        memset(t->data + p_ofs * TARGET_PAGE_DATA_SIZE, 0,
-               p_len * TARGET_PAGE_DATA_SIZE);
+        memset(t->data[p_ofs], 0, p_len * TARGET_PAGE_DATA_SIZE);
     }
 }
 
@@ -911,7 +908,7 @@ void *page_get_target_data(target_ulong address)
 {
     IntervalTreeNode *n;
     TargetPageDataNode *t;
-    target_ulong page, region, p_ofs;
+    target_ulong page, region;
 
     page = address & TARGET_PAGE_MASK;
     region = address & TBD_MASK;
@@ -927,8 +924,7 @@ void *page_get_target_data(target_ulong address)
         mmap_lock();
         n = interval_tree_iter_first(&targetdata_root, page, page);
         if (!n) {
-            t = g_malloc0(sizeof(TargetPageDataNode)
-                          + TPD_PAGES * TARGET_PAGE_DATA_SIZE);
+            t = g_new0(TargetPageDataNode, 1);
             n = &t->itree;
             n->start = region;
             n->last = region | ~TBD_MASK;
@@ -938,8 +934,7 @@ void *page_get_target_data(target_ulong address)
     }
 
     t = container_of(n, TargetPageDataNode, itree);
-    p_ofs = (page - region) >> TARGET_PAGE_BITS;
-    return t->data + p_ofs * TARGET_PAGE_DATA_SIZE;
+    return t->data[(page - region) >> TARGET_PAGE_BITS];
 }
 #else
 void page_reset_target_data(target_ulong start, target_ulong last) { }

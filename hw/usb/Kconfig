@@ -11,10 +11,6 @@ config USB_OHCI
     bool
     select USB
 
-config USB_OHCI_SYSBUS
-    bool
-    select USB_OHCI
-
 config USB_OHCI_PCI
     bool
     default y if PCI_DEVICES

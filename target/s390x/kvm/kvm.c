@@ -474,7 +474,8 @@ static int can_sync_regs(CPUState *cs, int regs)
 
 int kvm_arch_put_registers(CPUState *cs, int level)
 {
-    CPUS390XState *env = cpu_env(cs);
+    S390CPU *cpu = S390_CPU(cs);
+    CPUS390XState *env = &cpu->env;
     struct kvm_fpu fpu = {};
     int r;
     int i;
@@ -600,7 +601,8 @@ int kvm_arch_put_registers(CPUState *cs, int level)
 
 int kvm_arch_get_registers(CPUState *cs)
 {
-    CPUS390XState *env = cpu_env(cs);
+    S390CPU *cpu = S390_CPU(cs);
+    CPUS390XState *env = &cpu->env;
     struct kvm_fpu fpu;
     int i, r;
 

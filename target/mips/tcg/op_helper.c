@@ -279,7 +279,8 @@ void mips_cpu_do_unaligned_access(CPUState *cs, vaddr addr,
                                   MMUAccessType access_type,
                                   int mmu_idx, uintptr_t retaddr)
 {
-    CPUMIPSState *env = cpu_env(cs);
+    MIPSCPU *cpu = MIPS_CPU(cs);
+    CPUMIPSState *env = &cpu->env;
     int error_code = 0;
     int excp;
 
@@ -305,8 +306,9 @@ void mips_cpu_do_transaction_failed(CPUState *cs, hwaddr physaddr,
                                     int mmu_idx, MemTxAttrs attrs,
                                     MemTxResult response, uintptr_t retaddr)
 {
-    MIPSCPUClass *mcc = MIPS_CPU_GET_CLASS(cs);
-    CPUMIPSState *env = cpu_env(cs);
+    MIPSCPU *cpu = MIPS_CPU(cs);
+    MIPSCPUClass *mcc = MIPS_CPU_GET_CLASS(cpu);
+    CPUMIPSState *env = &cpu->env;
 
     if (access_type == MMU_INST_FETCH) {
         do_raise_exception(env, EXCP_IBE, retaddr);

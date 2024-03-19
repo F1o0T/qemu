@@ -102,7 +102,6 @@ static struct {
 #define DEFAULT_CPU_SPEED 2000
 
 static struct {
-    uint16_t processor_family;
     const char *sock_pfx, *manufacturer, *version, *serial, *asset, *part;
     uint64_t max_speed;
     uint64_t current_speed;
@@ -111,7 +110,6 @@ static struct {
     .max_speed = DEFAULT_CPU_SPEED,
     .current_speed = DEFAULT_CPU_SPEED,
     .processor_id = 0,
-    .processor_family = 0x01, /* Other */
 };
 
 struct type8_instance {
@@ -120,16 +118,6 @@ struct type8_instance {
     QTAILQ_ENTRY(type8_instance) next;
 };
 static QTAILQ_HEAD(, type8_instance) type8 = QTAILQ_HEAD_INITIALIZER(type8);
-
-/* type 9 instance for parsing */
-struct type9_instance {
-    const char *slot_designation, *pcidev;
-    uint8_t slot_type, slot_data_bus_width, current_usage, slot_length,
-            slot_characteristics1, slot_characteristics2;
-    uint16_t slot_id;
-    QTAILQ_ENTRY(type9_instance) next;
-};
-static QTAILQ_HEAD(, type9_instance) type9 = QTAILQ_HEAD_INITIALIZER(type9);
 
 static struct {
     size_t nvalues;
@@ -350,10 +338,6 @@ static const QemuOptDesc qemu_smbios_type4_opts[] = {
         .type = QEMU_OPT_STRING,
         .help = "part number",
     }, {
-        .name = "processor-family",
-        .type = QEMU_OPT_NUMBER,
-        .help = "processor family",
-    }, {
         .name = "processor-id",
         .type = QEMU_OPT_NUMBER,
         .help = "processor id",
@@ -362,11 +346,6 @@ static const QemuOptDesc qemu_smbios_type4_opts[] = {
 };
 
 static const QemuOptDesc qemu_smbios_type8_opts[] = {
-    {
-        .name = "type",
-        .type = QEMU_OPT_NUMBER,
-        .help = "SMBIOS element type",
-    },
     {
         .name = "internal_reference",
         .type = QEMU_OPT_STRING,
@@ -387,68 +366,9 @@ static const QemuOptDesc qemu_smbios_type8_opts[] = {
         .type = QEMU_OPT_NUMBER,
         .help = "port type",
     },
-    { /* end of list */ }
-};
-
-static const QemuOptDesc qemu_smbios_type9_opts[] = {
-    {
-        .name = "type",
-        .type = QEMU_OPT_NUMBER,
-        .help = "SMBIOS element type",
-    },
-    {
-        .name = "slot_designation",
-        .type = QEMU_OPT_STRING,
-        .help = "string number for reference designation",
-    },
-    {
-        .name = "slot_type",
-        .type = QEMU_OPT_NUMBER,
-        .help = "connector type",
-    },
-    {
-        .name = "slot_data_bus_width",
-        .type = QEMU_OPT_NUMBER,
-        .help = "port type",
-    },
-    {
-        .name = "current_usage",
-        .type = QEMU_OPT_NUMBER,
-        .help = "current usage",
-    },
-    {
-        .name = "slot_length",
-        .type = QEMU_OPT_NUMBER,
-        .help = "system slot length",
-    },
-    {
-        .name = "slot_id",
-        .type = QEMU_OPT_NUMBER,
-        .help = "system slot id",
-    },
-    {
-        .name = "slot_characteristics1",
-        .type = QEMU_OPT_NUMBER,
-        .help = "slot characteristics1, see the spec",
-    },
-    {
-        .name = "slot_characteristics2",
-        .type = QEMU_OPT_NUMBER,
-        .help = "slot characteristics2, see the spec",
-    },
-    {
-        .name = "pci_device",
-        .type = QEMU_OPT_STRING,
-        .help = "PCI device, if provided."
-    }
 };
 
 static const QemuOptDesc qemu_smbios_type11_opts[] = {
-    {
-        .name = "type",
-        .type = QEMU_OPT_NUMBER,
-        .help = "SMBIOS element type",
-    },
     {
         .name = "value",
         .type = QEMU_OPT_STRING,
@@ -459,7 +379,6 @@ static const QemuOptDesc qemu_smbios_type11_opts[] = {
         .type = QEMU_OPT_STRING,
         .help = "OEM string data from file",
     },
-    { /* end of list */ }
 };
 
 static const QemuOptDesc qemu_smbios_type17_opts[] = {
@@ -672,7 +591,6 @@ bool smbios_skip_table(uint8_t type, bool required_table)
 #define T2_BASE 0x200
 #define T3_BASE 0x300
 #define T4_BASE 0x400
-#define T9_BASE 0x900
 #define T11_BASE 0xe00
 
 #define T16_BASE 0x1000
@@ -808,7 +726,7 @@ static void smbios_build_type_4_table(MachineState *ms, unsigned instance)
     snprintf(sock_str, sizeof(sock_str), "%s%2x", type4.sock_pfx, instance);
     SMBIOS_TABLE_SET_STR(4, socket_designation_str, sock_str);
     t->processor_type = 0x03; /* CPU */
-    t->processor_family = 0xfe; /* use Processor Family 2 field */
+    t->processor_family = 0x01; /* Other */
     SMBIOS_TABLE_SET_STR(4, processor_manufacturer_str, type4.manufacturer);
     if (type4.processor_id == 0) {
         t->processor_id[0] = cpu_to_le32(smbios_cpuid_version);
@@ -840,7 +758,7 @@ static void smbios_build_type_4_table(MachineState *ms, unsigned instance)
     t->thread_count = (threads_per_socket > 255) ? 0xFF : threads_per_socket;
 
     t->processor_characteristics = cpu_to_le16(0x02); /* Unknown */
-    t->processor_family2 = cpu_to_le16(type4.processor_family);
+    t->processor_family2 = cpu_to_le16(0x01); /* Other */
 
     if (tbl_len == SMBIOS_TYPE_4_LEN_V30) {
         t->core_count2 = t->core_enabled2 = cpu_to_le16(cores_per_socket);
@@ -865,65 +783,6 @@ static void smbios_build_type_8_table(void)
         t->internal_connector_type = 0x0;
         t->external_connector_type = t8->connector_type;
         t->port_type = t8->port_type;
-
-        SMBIOS_BUILD_TABLE_POST;
-        instance++;
-    }
-}
-
-static void smbios_build_type_9_table(Error **errp)
-{
-    unsigned instance = 0;
-    struct type9_instance *t9;
-
-    QTAILQ_FOREACH(t9, &type9, next) {
-        SMBIOS_BUILD_TABLE_PRE(9, T9_BASE + instance, true);
-
-        SMBIOS_TABLE_SET_STR(9, slot_designation, t9->slot_designation);
-        t->slot_type = t9->slot_type;
-        t->slot_data_bus_width = t9->slot_data_bus_width;
-        t->current_usage = t9->current_usage;
-        t->slot_length = t9->slot_length;
-        t->slot_id = t9->slot_id;
-        t->slot_characteristics1 = t9->slot_characteristics1;
-        t->slot_characteristics2 = t9->slot_characteristics2;
-
-        if (t9->pcidev) {
-            PCIDevice *pdev = NULL;
-            int rc = pci_qdev_find_device(t9->pcidev, &pdev);
-            if (rc != 0) {
-                error_setg(errp,
-                           "No PCI device %s for SMBIOS type 9 entry %s",
-                           t9->pcidev, t9->slot_designation);
-                return;
-            }
-            /*
-             * We only handle the case were the device is attached to
-             * the PCI root bus. The general case is more complex as
-             * bridges are enumerated later and the table would need
-             * to be updated at this moment.
-             */
-            if (!pci_bus_is_root(pci_get_bus(pdev))) {
-                error_setg(errp,
-                           "Cannot create type 9 entry for PCI device %s: "
-                           "not attached to the root bus",
-                           t9->pcidev);
-                return;
-            }
-            t->segment_group_number = cpu_to_le16(0);
-            t->bus_number = pci_dev_bus_num(pdev);
-            t->device_number = pdev->devfn;
-        } else {
-            /*
-             * Per SMBIOS spec, For slots that are not of the PCI, AGP, PCI-X,
-             * or PCI-Express type that do not have bus/device/function
-             * information, 0FFh should be populated in the fields of Segment
-             * Group Number, Bus Number, Device/Function Number.
-             */
-            t->segment_group_number = 0xff;
-            t->bus_number = 0xff;
-            t->device_number = 0xff;
-        }
 
         SMBIOS_BUILD_TABLE_POST;
         instance++;
@@ -1124,13 +983,6 @@ void smbios_set_cpuid(uint32_t version, uint32_t features)
         field = value;                                                    \
     }
 
-void smbios_set_default_processor_family(uint16_t processor_family)
-{
-    if (type4.processor_family <= 0x01) {
-        type4.processor_family = processor_family;
-    }
-}
-
 void smbios_set_defaults(const char *manufacturer, const char *product,
                          const char *version, bool legacy_mode,
                          bool uuid_encoded, SmbiosEntryPointType ep_type)
@@ -1249,7 +1101,6 @@ void smbios_get_tables(MachineState *ms,
         }
 
         smbios_build_type_8_table();
-        smbios_build_type_9_table(errp);
         smbios_build_type_11_table();
 
 #define MAX_DIMM_SZ (16 * GiB)
@@ -1551,9 +1402,6 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
                 return;
             }
             save_opt(&type4.sock_pfx, opts, "sock_pfx");
-            type4.processor_family = qemu_opt_get_number(opts,
-                                                         "processor-family",
-                                                         0x01 /* Other */);
             save_opt(&type4.manufacturer, opts, "manufacturer");
             save_opt(&type4.version, opts, "version");
             save_opt(&type4.serial, opts, "serial");
@@ -1584,24 +1432,6 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             t8_i->port_type = qemu_opt_get_number(opts, "port_type", 0);
             QTAILQ_INSERT_TAIL(&type8, t8_i, next);
             return;
-        case 9: {
-            if (!qemu_opts_validate(opts, qemu_smbios_type9_opts, errp)) {
-                return;
-            }
-            struct type9_instance *t;
-            t = g_new0(struct type9_instance, 1);
-            save_opt(&t->slot_designation, opts, "slot_designation");
-            t->slot_type = qemu_opt_get_number(opts, "slot_type", 0);
-            t->slot_data_bus_width = qemu_opt_get_number(opts, "slot_data_bus_width", 0);
-            t->current_usage = qemu_opt_get_number(opts, "current_usage", 0);
-            t->slot_length = qemu_opt_get_number(opts, "slot_length", 0);
-            t->slot_id = qemu_opt_get_number(opts, "slot_id", 0);
-            t->slot_characteristics1 = qemu_opt_get_number(opts, "slot_characteristics1", 0);
-            t->slot_characteristics2 = qemu_opt_get_number(opts, "slot_characteristics2", 0);
-            save_opt(&t->pcidev, opts, "pcidev");
-            QTAILQ_INSERT_TAIL(&type9, t, next);
-            return;
-        }
         case 11:
             if (!qemu_opts_validate(opts, qemu_smbios_type11_opts, errp)) {
                 return;

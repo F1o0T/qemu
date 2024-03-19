@@ -71,7 +71,8 @@ static void superh_restore_state_to_opc(CPUState *cs,
 static bool superh_io_recompile_replay_branch(CPUState *cs,
                                               const TranslationBlock *tb)
 {
-    CPUSH4State *env = cpu_env(cs);
+    SuperHCPU *cpu = SUPERH_CPU(cs);
+    CPUSH4State *env = &cpu->env;
 
     if ((env->flags & (TB_FLAG_DELAY_SLOT | TB_FLAG_DELAY_SLOT_COND))
         && !(cs->tcg_cflags & CF_PCREL) && env->pc != tb->pc) {
@@ -88,26 +89,12 @@ static bool superh_cpu_has_work(CPUState *cs)
     return cs->interrupt_request & CPU_INTERRUPT_HARD;
 }
 
-static int sh4_cpu_mmu_index(CPUState *cs, bool ifetch)
-{
-    CPUSH4State *env = cpu_env(cs);
-
-    /*
-     * The instruction in a RTE delay slot is fetched in privileged mode,
-     * but executed in user mode.
-     */
-    if (ifetch && (env->flags & TB_FLAG_DELAY_SLOT_RTE)) {
-        return 0;
-    } else {
-        return (env->sr & (1u << SR_MD)) == 0 ? 1 : 0;
-    }
-}
-
 static void superh_cpu_reset_hold(Object *obj)
 {
-    CPUState *cs = CPU(obj);
-    SuperHCPUClass *scc = SUPERH_CPU_GET_CLASS(obj);
-    CPUSH4State *env = cpu_env(cs);
+    CPUState *s = CPU(obj);
+    SuperHCPU *cpu = SUPERH_CPU(s);
+    SuperHCPUClass *scc = SUPERH_CPU_GET_CLASS(cpu);
+    CPUSH4State *env = &cpu->env;
 
     if (scc->parent_phases.hold) {
         scc->parent_phases.hold(obj);
@@ -157,7 +144,8 @@ out:
 
 static void sh7750r_cpu_initfn(Object *obj)
 {
-    CPUSH4State *env = cpu_env(CPU(obj));
+    SuperHCPU *cpu = SUPERH_CPU(obj);
+    CPUSH4State *env = &cpu->env;
 
     env->id = SH_CPU_SH7750R;
     env->features = SH_FEATURE_BCR3_AND_BCR4;
@@ -174,7 +162,8 @@ static void sh7750r_class_init(ObjectClass *oc, void *data)
 
 static void sh7751r_cpu_initfn(Object *obj)
 {
-    CPUSH4State *env = cpu_env(CPU(obj));
+    SuperHCPU *cpu = SUPERH_CPU(obj);
+    CPUSH4State *env = &cpu->env;
 
     env->id = SH_CPU_SH7751R;
     env->features = SH_FEATURE_BCR3_AND_BCR4;
@@ -191,7 +180,8 @@ static void sh7751r_class_init(ObjectClass *oc, void *data)
 
 static void sh7785_cpu_initfn(Object *obj)
 {
-    CPUSH4State *env = cpu_env(CPU(obj));
+    SuperHCPU *cpu = SUPERH_CPU(obj);
+    CPUSH4State *env = &cpu->env;
 
     env->id = SH_CPU_SH7785;
     env->features = SH_FEATURE_SH4A;
@@ -226,7 +216,8 @@ static void superh_cpu_realizefn(DeviceState *dev, Error **errp)
 
 static void superh_cpu_initfn(Object *obj)
 {
-    CPUSH4State *env = cpu_env(CPU(obj));
+    SuperHCPU *cpu = SUPERH_CPU(obj);
+    CPUSH4State *env = &cpu->env;
 
     env->movcal_backup_tail = &(env->movcal_backup);
 }
@@ -275,7 +266,6 @@ static void superh_cpu_class_init(ObjectClass *oc, void *data)
 
     cc->class_by_name = superh_cpu_class_by_name;
     cc->has_work = superh_cpu_has_work;
-    cc->mmu_index = sh4_cpu_mmu_index;
     cc->dump_state = superh_cpu_dump_state;
     cc->set_pc = superh_cpu_set_pc;
     cc->get_pc = superh_cpu_get_pc;

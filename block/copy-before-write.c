@@ -407,7 +407,6 @@ out:
 static int cbw_open(BlockDriverState *bs, QDict *options, int flags,
                     Error **errp)
 {
-    ERRP_GUARD();
     BDRVCopyBeforeWriteState *s = bs->opaque;
     BdrvDirtyBitmap *bitmap = NULL;
     int64_t cluster_size;

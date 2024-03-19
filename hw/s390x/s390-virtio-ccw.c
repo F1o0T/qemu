@@ -229,9 +229,16 @@ static void s390_init_ipl_dev(const char *kernel_filename,
 
 static void s390_create_virtio_net(BusState *bus, const char *name)
 {
-    DeviceState *dev;
+    int i;
 
-    while ((dev = qemu_create_nic_device(name, true, "virtio"))) {
+    for (i = 0; i < nb_nics; i++) {
+        NICInfo *nd = &nd_table[i];
+        DeviceState *dev;
+
+        qemu_check_nic_model(nd, "virtio");
+
+        dev = qdev_new(name);
+        qdev_set_nic_properties(dev, nd);
         qdev_realize_and_unref(dev, bus, &error_fatal);
     }
 }
@@ -312,12 +319,12 @@ static void ccw_init(MachineState *machine)
 static void s390_cpu_plug(HotplugHandler *hotplug_dev,
                         DeviceState *dev, Error **errp)
 {
-    ERRP_GUARD();
     MachineState *ms = MACHINE(hotplug_dev);
     S390CPU *cpu = S390_CPU(dev);
+    ERRP_GUARD();
 
     g_assert(!ms->possible_cpus->cpus[cpu->env.core_id].cpu);
-    ms->possible_cpus->cpus[cpu->env.core_id].cpu = CPU(dev);
+    ms->possible_cpus->cpus[cpu->env.core_id].cpu = OBJECT(dev);
 
     if (s390_has_topology()) {
         s390_topology_setup_cpu(ms, cpu, errp);

@@ -28,13 +28,15 @@
 #
 # @tls: whether to perform TLS. Only applies to the "spice" protocol
 #
+# Returns: nothing on success.
+#
 # Since: 0.14
 #
 # Example:
 #
-#         -> { "execute": "add_client", "arguments": { "protocol": "vnc",
-#                                                      "fdname": "myclient" } }
-#         <- { "return": {} }
+# -> { "execute": "add_client", "arguments": { "protocol": "vnc",
+#                                              "fdname": "myclient" } }
+# <- { "return": {} }
 ##
 { 'command': 'add_client',
   'data': { 'protocol': 'str', 'fdname': 'str', '*skipauth': 'bool',
@@ -62,8 +64,8 @@
 #
 # Example:
 #
-#     -> { "execute": "query-name" }
-#     <- { "return": { "name": "qemu-name" } }
+# -> { "execute": "query-name" }
+# <- { "return": { "name": "qemu-name" } }
 ##
 { 'command': 'query-name', 'returns': 'NameInfo', 'allow-preconfig': true }
 
@@ -113,18 +115,18 @@
 #
 # Example:
 #
-#     -> { "execute": "query-iothreads" }
-#     <- { "return": [
-#              {
-#                 "id":"iothread0",
-#                 "thread-id":3134
-#              },
-#              {
-#                 "id":"iothread1",
-#                 "thread-id":3135
-#              }
-#           ]
-#        }
+# -> { "execute": "query-iothreads" }
+# <- { "return": [
+#          {
+#             "id":"iothread0",
+#             "thread-id":3134
+#          },
+#          {
+#             "id":"iothread1",
+#             "thread-id":3135
+#          }
+#       ]
+#    }
 ##
 { 'command': 'query-iothreads', 'returns': ['IOThreadInfo'],
   'allow-preconfig': true }
@@ -146,8 +148,8 @@
 #
 # Example:
 #
-#     -> { "execute": "stop" }
-#     <- { "return": {} }
+# -> { "execute": "stop" }
+# <- { "return": {} }
 ##
 { 'command': 'stop' }
 
@@ -157,6 +159,8 @@
 # Resume guest VM execution.
 #
 # Since: 0.14
+#
+# Returns: If successful, nothing
 #
 # Notes: This command will succeed if the guest is currently running.
 #     It will also succeed if the guest is in the "inmigrate" state;
@@ -170,8 +174,8 @@
 #
 # Example:
 #
-#     -> { "execute": "cont" }
-#     <- { "return": {} }
+# -> { "execute": "cont" }
+# <- { "return": {} }
 ##
 { 'command': 'cont' }
 
@@ -192,10 +196,12 @@
 #
 # Since: 3.0
 #
+# Returns: nothing
+#
 # Example:
 #
-#     -> { "execute": "x-exit-preconfig" }
-#     <- { "return": {} }
+# -> { "execute": "x-exit-preconfig" }
+# <- { "return": {} }
 ##
 { 'command': 'x-exit-preconfig', 'allow-preconfig': true,
   'features': [ 'unstable' ] }
@@ -234,9 +240,9 @@
 #
 # Example:
 #
-#     -> { "execute": "human-monitor-command",
-#          "arguments": { "command-line": "info kvm" } }
-#     <- { "return": "kvm support: enabled\r\n" }
+# -> { "execute": "human-monitor-command",
+#      "arguments": { "command-line": "info kvm" } }
+# <- { "return": "kvm support: enabled\r\n" }
 ##
 { 'command': 'human-monitor-command',
   'data': {'command-line': 'str', '*cpu-index': 'int'},
@@ -250,6 +256,8 @@
 #
 # @fdname: file descriptor name
 #
+# Returns: Nothing on success
+#
 # Since: 0.14
 #
 # Notes: If @fdname already exists, the file descriptor assigned to it
@@ -260,8 +268,8 @@
 #
 # Example:
 #
-#     -> { "execute": "getfd", "arguments": { "fdname": "fd1" } }
-#     <- { "return": {} }
+# -> { "execute": "getfd", "arguments": { "fdname": "fd1" } }
+# <- { "return": {} }
 ##
 { 'command': 'getfd', 'data': {'fdname': 'str'}, 'if': 'CONFIG_POSIX' }
 
@@ -277,6 +285,8 @@
 #
 # @fdname: file descriptor name
 #
+# Returns: Nothing on success
+#
 # Since: 8.0
 #
 # Notes: If @fdname already exists, the file descriptor assigned to it
@@ -287,8 +297,8 @@
 #
 # Example:
 #
-#     -> { "execute": "get-win32-socket", "arguments": { "info": "abcd123..", fdname": "skclient" } }
-#     <- { "return": {} }
+# -> { "execute": "get-win32-socket", "arguments": { "info": "abcd123..", fdname": "skclient" } }
+# <- { "return": {} }
 ##
 { 'command': 'get-win32-socket', 'data': {'info': 'str', 'fdname': 'str'}, 'if': 'CONFIG_WIN32' }
 
@@ -299,12 +309,14 @@
 #
 # @fdname: file descriptor name
 #
+# Returns: Nothing on success
+#
 # Since: 0.14
 #
 # Example:
 #
-#     -> { "execute": "closefd", "arguments": { "fdname": "fd1" } }
-#     <- { "return": {} }
+# -> { "execute": "closefd", "arguments": { "fdname": "fd1" } }
+# <- { "return": {} }
 ##
 { 'command': 'closefd', 'data': {'fdname': 'str'} }
 
@@ -332,23 +344,20 @@
 # @opaque: A free-form string that can be used to describe the fd.
 #
 # Returns:
-#     @AddfdInfo
-#
-# Errors:
+#     - @AddfdInfo on success
 #     - If file descriptor was not received, GenericError
 #     - If @fdset-id is a negative value, GenericError
 #
-# Notes:
-#     The list of fd sets is shared by all monitor connections.
+# Notes: The list of fd sets is shared by all monitor connections.
 #
-#     If @fdset-id is not specified, a new fd set will be created.
+# If @fdset-id is not specified, a new fd set will be created.
 #
 # Since: 1.2
 #
 # Example:
 #
-#     -> { "execute": "add-fd", "arguments": { "fdset-id": 1 } }
-#     <- { "return": { "fdset-id": 1, "fd": 3 } }
+# -> { "execute": "add-fd", "arguments": { "fdset-id": 1 } }
+# <- { "return": { "fdset-id": 1, "fd": 3 } }
 ##
 { 'command': 'add-fd',
   'data': { '*fdset-id': 'int',
@@ -364,21 +373,21 @@
 #
 # @fd: The file descriptor that is to be removed.
 #
-# Errors:
+# Returns:
+#     - Nothing on success
 #     - If @fdset-id or @fd is not found, GenericError
 #
 # Since: 1.2
 #
-# Notes:
-#     The list of fd sets is shared by all monitor connections.
+# Notes: The list of fd sets is shared by all monitor connections.
 #
-#     If @fd is not specified, all file descriptors in @fdset-id will
-#     be removed.
+# If @fd is not specified, all file descriptors in @fdset-id will be
+# removed.
 #
 # Example:
 #
-#     -> { "execute": "remove-fd", "arguments": { "fdset-id": 1, "fd": 3 } }
-#     <- { "return": {} }
+# -> { "execute": "remove-fd", "arguments": { "fdset-id": 1, "fd": 3 } }
+# <- { "return": {} }
 ##
 { 'command': 'remove-fd', 'data': {'fdset-id': 'int', '*fd': 'int'} }
 
@@ -423,34 +432,34 @@
 #
 # Example:
 #
-#     -> { "execute": "query-fdsets" }
-#     <- { "return": [
+# -> { "execute": "query-fdsets" }
+# <- { "return": [
+#        {
+#          "fds": [
 #            {
-#              "fds": [
-#                {
-#                  "fd": 30,
-#                  "opaque": "rdonly:/path/to/file"
-#                },
-#                {
-#                  "fd": 24,
-#                  "opaque": "rdwr:/path/to/file"
-#                }
-#              ],
-#              "fdset-id": 1
+#              "fd": 30,
+#              "opaque": "rdonly:/path/to/file"
 #            },
 #            {
-#              "fds": [
-#                {
-#                  "fd": 28
-#                },
-#                {
-#                  "fd": 29
-#                }
-#              ],
-#              "fdset-id": 0
+#              "fd": 24,
+#              "opaque": "rdwr:/path/to/file"
 #            }
-#          ]
+#          ],
+#          "fdset-id": 1
+#        },
+#        {
+#          "fds": [
+#            {
+#              "fd": 28
+#            },
+#            {
+#              "fd": 29
+#            }
+#          ],
+#          "fdset-id": 0
 #        }
+#      ]
+#    }
 ##
 { 'command': 'query-fdsets', 'returns': ['FdsetInfo'] }
 
@@ -517,33 +526,31 @@
 # @option: option name
 #
 # Returns: list of @CommandLineOptionInfo for all options (or for the
-#     given @option).
-#
-# Errors:
-#     - if the given @option doesn't exist
+#     given @option).  Returns an error if the given @option doesn't
+#     exist.
 #
 # Since: 1.5
 #
 # Example:
 #
-#     -> { "execute": "query-command-line-options",
-#          "arguments": { "option": "option-rom" } }
-#     <- { "return": [
-#             {
-#                 "parameters": [
-#                     {
-#                         "name": "romfile",
-#                         "type": "string"
-#                     },
-#                     {
-#                         "name": "bootindex",
-#                         "type": "number"
-#                     }
-#                 ],
-#                 "option": "option-rom"
-#             }
-#          ]
-#        }
+# -> { "execute": "query-command-line-options",
+#      "arguments": { "option": "option-rom" } }
+# <- { "return": [
+#         {
+#             "parameters": [
+#                 {
+#                     "name": "romfile",
+#                     "type": "string"
+#                 },
+#                 {
+#                     "name": "bootindex",
+#                     "type": "number"
+#                 }
+#             ],
+#             "option": "option-rom"
+#         }
+#      ]
+#    }
 ##
 {'command': 'query-command-line-options',
  'data': {'*option': 'str'},
@@ -568,9 +575,9 @@
 #
 # Example:
 #
-#     <- { "event": "RTC_CHANGE",
-#          "data": { "offset": 78 },
-#          "timestamp": { "seconds": 1267020223, "microseconds": 435656 } }
+# <- { "event": "RTC_CHANGE",
+#      "data": { "offset": 78 },
+#      "timestamp": { "seconds": 1267020223, "microseconds": 435656 } }
 ##
 { 'event': 'RTC_CHANGE',
   'data': { 'offset': 'int', 'qom-path': 'str' } }
@@ -595,12 +602,12 @@
 #
 # Example:
 #
-#     <- { "event": "VFU_CLIENT_HANGUP",
-#          "data": { "vfu-id": "vfu1",
-#                    "vfu-qom-path": "/objects/vfu1",
-#                    "dev-id": "sas1",
-#                    "dev-qom-path": "/machine/peripheral/sas1" },
-#          "timestamp": { "seconds": 1265044230, "microseconds": 450486 } }
+# <- { "event": "VFU_CLIENT_HANGUP",
+#      "data": { "vfu-id": "vfu1",
+#                "vfu-qom-path": "/objects/vfu1",
+#                "dev-id": "sas1",
+#                "dev-qom-path": "/machine/peripheral/sas1" },
+#      "timestamp": { "seconds": 1265044230, "microseconds": 450486 } }
 ##
 { 'event': 'VFU_CLIENT_HANGUP',
   'data': { 'vfu-id': 'str', 'vfu-qom-path': 'str',

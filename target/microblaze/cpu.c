@@ -118,22 +118,6 @@ static bool mb_cpu_has_work(CPUState *cs)
     return cs->interrupt_request & (CPU_INTERRUPT_HARD | CPU_INTERRUPT_NMI);
 }
 
-static int mb_cpu_mmu_index(CPUState *cs, bool ifetch)
-{
-    CPUMBState *env = cpu_env(cs);
-    MicroBlazeCPU *cpu = env_archcpu(env);
-
-    /* Are we in nommu mode?.  */
-    if (!(env->msr & MSR_VM) || !cpu->cfg.use_mmu) {
-        return MMU_NOMMU_IDX;
-    }
-
-    if (env->msr & MSR_UM) {
-        return MMU_USER_IDX;
-    }
-    return MMU_KERNEL_IDX;
-}
-
 #ifndef CONFIG_USER_ONLY
 static void mb_cpu_ns_axi_dp(void *opaque, int irq, int level)
 {
@@ -183,9 +167,9 @@ static void microblaze_cpu_set_irq(void *opaque, int irq, int level)
 
 static void mb_cpu_reset_hold(Object *obj)
 {
-    CPUState *cs = CPU(obj);
-    MicroBlazeCPU *cpu = MICROBLAZE_CPU(cs);
-    MicroBlazeCPUClass *mcc = MICROBLAZE_CPU_GET_CLASS(obj);
+    CPUState *s = CPU(obj);
+    MicroBlazeCPU *cpu = MICROBLAZE_CPU(s);
+    MicroBlazeCPUClass *mcc = MICROBLAZE_CPU_GET_CLASS(cpu);
     CPUMBState *env = &cpu->env;
 
     if (mcc->parent_phases.hold) {
@@ -313,9 +297,8 @@ static void mb_cpu_initfn(Object *obj)
     CPUMBState *env = &cpu->env;
 
     gdb_register_coprocessor(CPU(cpu), mb_cpu_gdb_read_stack_protect,
-                             mb_cpu_gdb_write_stack_protect,
-                             gdb_find_static_feature("microblaze-stack-protect.xml"),
-                             0);
+                             mb_cpu_gdb_write_stack_protect, 2,
+                             "microblaze-stack-protect.xml", 0);
 
     set_float_rounding_mode(float_round_nearest_even, &env->fp_status);
 
@@ -432,7 +415,7 @@ static void mb_cpu_class_init(ObjectClass *oc, void *data)
 
     cc->class_by_name = mb_cpu_class_by_name;
     cc->has_work = mb_cpu_has_work;
-    cc->mmu_index = mb_cpu_mmu_index;
+
     cc->dump_state = mb_cpu_dump_state;
     cc->set_pc = mb_cpu_set_pc;
     cc->get_pc = mb_cpu_get_pc;
@@ -444,6 +427,7 @@ static void mb_cpu_class_init(ObjectClass *oc, void *data)
     cc->sysemu_ops = &mb_sysemu_ops;
 #endif
     device_class_set_props(dc, mb_properties);
+    cc->gdb_num_core_regs = 32 + 25;
     cc->gdb_core_xml_file = "microblaze-core.xml";
 
     cc->disas_set_info = mb_disas_set_info;

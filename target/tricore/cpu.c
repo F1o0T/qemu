@@ -36,48 +36,57 @@ static const gchar *tricore_gdb_arch_name(CPUState *cs)
 
 static void tricore_cpu_set_pc(CPUState *cs, vaddr value)
 {
-    cpu_env(cs)->PC = value & ~(target_ulong)1;
+    TriCoreCPU *cpu = TRICORE_CPU(cs);
+    CPUTriCoreState *env = &cpu->env;
+
+    env->PC = value & ~(target_ulong)1;
 }
 
 static vaddr tricore_cpu_get_pc(CPUState *cs)
 {
-    return cpu_env(cs)->PC;
+    TriCoreCPU *cpu = TRICORE_CPU(cs);
+    CPUTriCoreState *env = &cpu->env;
+
+    return env->PC;
 }
 
 static void tricore_cpu_synchronize_from_tb(CPUState *cs,
                                             const TranslationBlock *tb)
 {
+    TriCoreCPU *cpu = TRICORE_CPU(cs);
+    CPUTriCoreState *env = &cpu->env;
+
     tcg_debug_assert(!(cs->tcg_cflags & CF_PCREL));
-    cpu_env(cs)->PC = tb->pc;
+    env->PC = tb->pc;
 }
 
 static void tricore_restore_state_to_opc(CPUState *cs,
                                          const TranslationBlock *tb,
                                          const uint64_t *data)
 {
-    cpu_env(cs)->PC = data[0];
+    TriCoreCPU *cpu = TRICORE_CPU(cs);
+    CPUTriCoreState *env = &cpu->env;
+
+    env->PC = data[0];
 }
 
 static void tricore_cpu_reset_hold(Object *obj)
 {
-    CPUState *cs = CPU(obj);
-    TriCoreCPUClass *tcc = TRICORE_CPU_GET_CLASS(obj);
+    CPUState *s = CPU(obj);
+    TriCoreCPU *cpu = TRICORE_CPU(s);
+    TriCoreCPUClass *tcc = TRICORE_CPU_GET_CLASS(cpu);
+    CPUTriCoreState *env = &cpu->env;
 
     if (tcc->parent_phases.hold) {
         tcc->parent_phases.hold(obj);
     }
 
-    cpu_state_reset(cpu_env(cs));
+    cpu_state_reset(env);
 }
 
 static bool tricore_cpu_has_work(CPUState *cs)
 {
     return true;
-}
-
-static int tricore_cpu_mmu_index(CPUState *cs, bool ifetch)
-{
-    return 0;
 }
 
 static void tricore_cpu_realizefn(DeviceState *dev, Error **errp)
@@ -185,7 +194,6 @@ static void tricore_cpu_class_init(ObjectClass *c, void *data)
                                        &mcc->parent_phases);
     cc->class_by_name = tricore_cpu_class_by_name;
     cc->has_work = tricore_cpu_has_work;
-    cc->mmu_index = tricore_cpu_mmu_index;
 
     cc->gdb_read_register = tricore_cpu_gdb_read_register;
     cc->gdb_write_register = tricore_cpu_gdb_write_register;

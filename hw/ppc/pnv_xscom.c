@@ -44,12 +44,15 @@ static void xscom_complete(CPUState *cs, uint64_t hmer_bits)
      * passed for the cpu, and no CPU completion is generated.
      */
     if (cs) {
+        PowerPCCPU *cpu = POWERPC_CPU(cs);
+        CPUPPCState *env = &cpu->env;
+
         /*
          * TODO: Need a CPU helper to set HMER, also handle generation
          * of HMIs
          */
         cpu_synchronize_state(cs);
-        cpu_env(cs)->spr[SPR_HMER] |= hmer_bits;
+        env->spr[SPR_HMER] |= hmer_bits;
     }
 }
 

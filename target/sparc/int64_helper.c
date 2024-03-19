@@ -130,7 +130,8 @@ void cpu_check_irqs(CPUSPARCState *env)
 
 void sparc_cpu_do_interrupt(CPUState *cs)
 {
-    CPUSPARCState *env = cpu_env(cs);
+    SPARCCPU *cpu = SPARC_CPU(cs);
+    CPUSPARCState *env = &cpu->env;
     int intno = cs->exception_index;
     trap_state *tsptr;
 

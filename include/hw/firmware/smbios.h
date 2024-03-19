@@ -211,23 +211,6 @@ struct smbios_type_8 {
     uint8_t port_type;
 } QEMU_PACKED;
 
-/* SMBIOS type 9 - System Slots (v2.1+) */
-struct smbios_type_9 {
-    struct smbios_structure_header header;
-    uint8_t slot_designation;
-    uint8_t slot_type;
-    uint8_t slot_data_bus_width;
-    uint8_t current_usage;
-    uint8_t slot_length;
-    uint16_t slot_id;
-    uint8_t slot_characteristics1;
-    uint8_t slot_characteristics2;
-    /* SMBIOS spec v2.6+ */
-    uint16_t segment_group_number;
-    uint8_t bus_number;
-    uint8_t device_number;
-} QEMU_PACKED;
-
 /* SMBIOS type 11 - OEM strings */
 struct smbios_type_11 {
     struct smbios_structure_header header;
@@ -312,7 +295,6 @@ void smbios_set_cpuid(uint32_t version, uint32_t features);
 void smbios_set_defaults(const char *manufacturer, const char *product,
                          const char *version, bool legacy_mode,
                          bool uuid_encoded, SmbiosEntryPointType ep_type);
-void smbios_set_default_processor_family(uint16_t processor_family);
 uint8_t *smbios_get_table_legacy(MachineState *ms, size_t *length);
 void smbios_get_tables(MachineState *ms,
                        const struct smbios_phys_mem_area *mem_array,

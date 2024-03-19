@@ -48,7 +48,7 @@ hwaddr tricore_cpu_get_phys_page_debug(CPUState *cs, vaddr addr)
     TriCoreCPU *cpu = TRICORE_CPU(cs);
     hwaddr phys_addr;
     int prot;
-    int mmu_idx = cpu_mmu_index(cs, false);
+    int mmu_idx = cpu_mmu_index(&cpu->env, false);
 
     if (get_physical_address(&cpu->env, &phys_addr, &prot, addr,
                              MMU_DATA_LOAD, mmu_idx)) {
@@ -67,7 +67,8 @@ bool tricore_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
                           MMUAccessType rw, int mmu_idx,
                           bool probe, uintptr_t retaddr)
 {
-    CPUTriCoreState *env = cpu_env(cs);
+    TriCoreCPU *cpu = TRICORE_CPU(cs);
+    CPUTriCoreState *env = &cpu->env;
     hwaddr physical;
     int prot;
     int ret = 0;

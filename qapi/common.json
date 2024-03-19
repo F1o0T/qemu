@@ -52,6 +52,17 @@
   'data': [ 'on', 'off', 'split' ] }
 
 ##
+# @String:
+#
+# A fat type wrapping 'str', to be embedded in lists.
+#
+# Since: 1.2
+##
+{ 'struct': 'String',
+  'data': {
+    'str': 'str' } }
+
+##
 # @StrOrNull:
 #
 # This is a string value or the explicit lack of a string (null
@@ -107,14 +118,10 @@
 #
 # @16: 16.0GT/s
 #
-# @32: 32.0GT/s
-#
-# @64: 64.0GT/s
-#
 # Since: 4.0
 ##
 { 'enum': 'PCIELinkSpeed',
-  'data': [ '2_5', '5', '8', '16', '32', '64' ] }
+  'data': [ '2_5', '5', '8', '16' ] }
 
 ##
 # @PCIELinkWidth:

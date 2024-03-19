@@ -30,7 +30,8 @@
 
 bool avr_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
 {
-    CPUAVRState *env = cpu_env(cs);
+    AVRCPU *cpu = AVR_CPU(cs);
+    CPUAVRState *env = &cpu->env;
 
     /*
      * We cannot separate a skip from the next instruction,
@@ -68,7 +69,8 @@ bool avr_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
 
 void avr_cpu_do_interrupt(CPUState *cs)
 {
-    CPUAVRState *env = cpu_env(cs);
+    AVRCPU *cpu = AVR_CPU(cs);
+    CPUAVRState *env = &cpu->env;
 
     uint32_t ret = env->pc_w;
     int vector = 0;
@@ -142,7 +144,9 @@ bool avr_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
             if (probe) {
                 page_size = 1;
             } else {
-                cpu_env(cs)->fullacc = 1;
+                AVRCPU *cpu = AVR_CPU(cs);
+                CPUAVRState *env = &cpu->env;
+                env->fullacc = 1;
                 cpu_loop_exit_restore(cs, retaddr);
             }
         }

@@ -63,9 +63,9 @@ static bool colo_runstate_is_stopped(void)
     return runstate_check(RUN_STATE_COLO) || !runstate_is_running();
 }
 
-static void colo_checkpoint_notify(void)
+static void colo_checkpoint_notify(void *opaque)
 {
-    MigrationState *s = migrate_get_current();
+    MigrationState *s = opaque;
     int64_t next_notify_time;
 
     qemu_event_set(&s->colo_checkpoint_event);
@@ -74,15 +74,10 @@ static void colo_checkpoint_notify(void)
     timer_mod(s->colo_delay_timer, next_notify_time);
 }
 
-static void colo_checkpoint_notify_timer(void *opaque)
-{
-    colo_checkpoint_notify();
-}
-
 void colo_checkpoint_delay_set(void)
 {
     if (migration_in_colo_state()) {
-        colo_checkpoint_notify();
+        colo_checkpoint_notify(migrate_get_current());
     }
 }
 
@@ -167,7 +162,7 @@ static void primary_vm_do_failover(void)
      * kick COLO thread which might wait at
      * qemu_sem_wait(&s->colo_checkpoint_sem).
      */
-    colo_checkpoint_notify();
+    colo_checkpoint_notify(s);
 
     /*
      * Wake up COLO thread which may blocked in recv() or send(),
@@ -523,7 +518,7 @@ out:
 
 static void colo_compare_notify_checkpoint(Notifier *notifier, void *data)
 {
-    colo_checkpoint_notify();
+    colo_checkpoint_notify(data);
 }
 
 static void colo_process_checkpoint(MigrationState *s)
@@ -647,7 +642,7 @@ void migrate_start_colo_process(MigrationState *s)
     bql_unlock();
     qemu_event_init(&s->colo_checkpoint_event, false);
     s->colo_delay_timer =  timer_new_ms(QEMU_CLOCK_HOST,
-                                colo_checkpoint_notify_timer, NULL);
+                                colo_checkpoint_notify, s);
 
     qemu_sem_init(&s->colo_exit_sem, 0);
     colo_process_checkpoint(s);

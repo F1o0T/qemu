@@ -85,28 +85,11 @@
 #include "hw/char/pl011.h"
 #include "qemu/guest-random.h"
 
-static GlobalProperty arm_virt_compat[] = {
-    { TYPE_VIRTIO_IOMMU_PCI, "aw-bits", "48" },
-};
-static const size_t arm_virt_compat_len = G_N_ELEMENTS(arm_virt_compat);
-
-/*
- * This cannot be called from the virt_machine_class_init() because
- * TYPE_VIRT_MACHINE is abstract and mc->compat_props g_ptr_array_new()
- * only is called on virt non abstract class init.
- */
-static void arm_virt_compat_set(MachineClass *mc)
-{
-    compat_props_add(mc->compat_props, arm_virt_compat,
-                     arm_virt_compat_len);
-}
-
 #define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
     static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
                                                     void *data) \
     { \
         MachineClass *mc = MACHINE_CLASS(oc); \
-        arm_virt_compat_set(mc); \
         virt_machine_##major##_##minor##_options(mc); \
         mc->desc = "QEMU " # major "." # minor " ARM Virtual Machine"; \
         if (latest) { \
@@ -238,20 +221,6 @@ static void create_randomness(MachineState *ms, const char *node)
     qemu_fdt_setprop(ms->fdt, node, "rng-seed", seed.rng, sizeof(seed.rng));
 }
 
-/*
- * The CPU object always exposes the NS EL2 virt timer IRQ line,
- * but we don't want to advertise it to the guest in the dtb or ACPI
- * table unless it's really going to do something.
- */
-static bool ns_el2_virt_timer_present(void)
-{
-    ARMCPU *cpu = ARM_CPU(qemu_get_cpu(0));
-    CPUARMState *env = &cpu->env;
-
-    return arm_feature(env, ARM_FEATURE_AARCH64) &&
-        arm_feature(env, ARM_FEATURE_EL2) && cpu_isar_feature(aa64_vh, cpu);
-}
-
 static void create_fdt(VirtMachineState *vms)
 {
     MachineState *ms = MACHINE(vms);
@@ -369,29 +338,15 @@ static void fdt_add_timer_nodes(const VirtMachineState *vms)
                                 "arm,armv7-timer");
     }
     qemu_fdt_setprop(ms->fdt, "/timer", "always-on", NULL, 0);
-    if (vms->ns_el2_virt_timer_irq) {
-        qemu_fdt_setprop_cells(ms->fdt, "/timer", "interrupts",
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_S_EL1_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_NS_EL1_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_VIRT_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_NS_EL2_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_NS_EL2_VIRT_IRQ), irqflags);
-    } else {
-        qemu_fdt_setprop_cells(ms->fdt, "/timer", "interrupts",
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_S_EL1_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_NS_EL1_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_VIRT_IRQ), irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI,
-                               INTID_TO_PPI(ARCH_TIMER_NS_EL2_IRQ), irqflags);
-    }
+    qemu_fdt_setprop_cells(ms->fdt, "/timer", "interrupts",
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_S_EL1_IRQ), irqflags,
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_NS_EL1_IRQ), irqflags,
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_VIRT_IRQ), irqflags,
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_NS_EL2_IRQ), irqflags);
 }
 
 static void fdt_add_cpu_nodes(const VirtMachineState *vms)
@@ -834,7 +789,6 @@ static void create_gic(VirtMachineState *vms, MemoryRegion *mem)
             [GTIMER_VIRT] = ARCH_TIMER_VIRT_IRQ,
             [GTIMER_HYP]  = ARCH_TIMER_NS_EL2_IRQ,
             [GTIMER_SEC]  = ARCH_TIMER_S_EL1_IRQ,
-            [GTIMER_HYPVIRT] = ARCH_TIMER_NS_EL2_VIRT_IRQ,
         };
 
         for (unsigned irq = 0; irq < ARRAY_SIZE(timer_irq); irq++) {
@@ -1503,7 +1457,9 @@ static void create_pcie(VirtMachineState *vms)
     pci->bypass_iommu = vms->default_bus_bypass_iommu;
     vms->bus = pci->bus;
     if (vms->bus) {
-        pci_init_nic_devices(pci->bus, mc->default_nic);
+        for (i = 0; i < nb_nics; i++) {
+            pci_nic_init_nofail(&nd_table[i], pci->bus, mc->default_nic, NULL);
+        }
     }
 
     nodename = vms->pciehb_nodename = g_strdup_printf("/pcie@%" PRIx64, base);
@@ -2268,11 +2224,6 @@ static void machvirt_init(MachineState *machine)
         qdev_realize(DEVICE(cpuobj), NULL, &error_fatal);
         object_unref(cpuobj);
     }
-
-    /* Now we've created the CPUs we can see if they have the hypvirt timer */
-    vms->ns_el2_virt_timer_irq = ns_el2_virt_timer_present() &&
-        !vmc->no_ns_el2_virt_timer_irq;
-
     fdt_add_timer_nodes(vms);
     fdt_add_cpu_nodes(vms);
 
@@ -3230,16 +3181,8 @@ DEFINE_VIRT_MACHINE_AS_LATEST(9, 0)
 
 static void virt_machine_8_2_options(MachineClass *mc)
 {
-    VirtMachineClass *vmc = VIRT_MACHINE_CLASS(OBJECT_CLASS(mc));
-
     virt_machine_9_0_options(mc);
     compat_props_add(mc->compat_props, hw_compat_8_2, hw_compat_8_2_len);
-    /*
-     * Don't expose NS_EL2_VIRT timer IRQ in DTB on ACPI on 8.2 and
-     * earlier machines. (Exposing it tickles a bug in older EDK2
-     * guest BIOS binaries.)
-     */
-    vmc->no_ns_el2_virt_timer_irq = true;
 }
 DEFINE_VIRT_MACHINE(8, 2)
 

@@ -199,7 +199,10 @@ static inline SCSIBus *scsi_bus_from_device(SCSIDevice *d)
 }
 
 SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockBackend *blk,
-                                      int unit, bool removable, BlockConf *conf,
+                                      int unit, bool removable, int bootindex,
+                                      bool share_rw,
+                                      BlockdevOnError rerror,
+                                      BlockdevOnError werror,
                                       const char *serial, Error **errp);
 void scsi_bus_set_ua(SCSIBus *bus, SCSISense sense);
 void scsi_bus_legacy_handle_cmdline(SCSIBus *bus);

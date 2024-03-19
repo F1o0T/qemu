@@ -36,7 +36,6 @@
 #include "qemu/bcd.h"
 #include "qemu/module.h"
 #include "trace.h"
-#include "sysemu/watchdog.h"
 
 #include "m48t59-internal.h"
 #include "migration/vmstate.h"
@@ -164,7 +163,8 @@ static void watchdog_cb (void *opaque)
     if (NVRAM->buffer[0x1FF7] & 0x80) {
         NVRAM->buffer[0x1FF7] = 0x00;
         NVRAM->buffer[0x1FFC] &= ~0x40;
-        watchdog_perform_action();
+        /* May it be a hw CPU Reset instead ? */
+        qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
     } else {
         qemu_set_irq(NVRAM->IRQ, 1);
         qemu_set_irq(NVRAM->IRQ, 0);

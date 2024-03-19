@@ -1172,17 +1172,6 @@ SRST
     Please also refer to the wiki page for general scenarios of VT-d
     emulation in QEMU: https://wiki.qemu.org/Features/VT-d.
 
-``-device virtio-iommu-pci[,option=...]``
-    This is only supported by ``-machine q35`` (x86_64) and ``-machine virt`` (ARM).
-    It supports below options:
-
-    ``granule=val`` (possible values are 4k, 8k, 16k, 64k and host; default: host)
-        This decides the default granule to be be exposed by the
-        virtio-iommu. If host, the granule matches the host page size.
-
-    ``aw-bits=val`` (val between 32 and 64, default depends on machine)
-        This decides the address width of the IOVA address space.
-
 ERST
 
 DEF("name", HAS_ARG, QEMU_OPTION_name,
@@ -2096,7 +2085,7 @@ DEF("display", HAS_ARG, QEMU_OPTION_display,
 #if defined(CONFIG_GTK)
     "-display gtk[,full-screen=on|off][,gl=on|off][,grab-on-hover=on|off]\n"
     "            [,show-tabs=on|off][,show-cursor=on|off][,window-close=on|off]\n"
-    "            [,show-menubar=on|off][,zoom-to-fit=on|off]\n"
+    "            [,show-menubar=on|off]\n"
 #endif
 #if defined(CONFIG_VNC)
     "-display vnc=<display>[,<optargs>]\n"
@@ -2479,7 +2468,7 @@ SRST
 
     ``to=L``
         With this option, QEMU will try next available VNC displays,
-        until the number L, if the originally defined "-vnc display" is
+        until the number L, if the origianlly defined "-vnc display" is
         not available, e.g. port 5900+display is already used by another
         application. By default, to=0.
 
@@ -2652,8 +2641,7 @@ SRST
 ``-win2k-hack``
     Use it when installing Windows 2000 to avoid a disk full bug. After
     Windows 2000 is installed, you no longer need this option (this
-    option slows down the IDE transfers).  Synonym of ``-global
-    ide-device.win2k-install-hack=on``.
+    option slows down the IDE transfers).
 ERST
 
 DEF("no-fd-bootchk", 0, QEMU_OPTION_no_fd_bootchk,
@@ -2662,7 +2650,7 @@ DEF("no-fd-bootchk", 0, QEMU_OPTION_no_fd_bootchk,
 SRST
 ``-no-fd-bootchk``
     Disable boot signature checking for floppy disks in BIOS. May be
-    needed to boot from old floppy disks.  Synonym of ``-m fd-bootchk=off``.
+    needed to boot from old floppy disks.
 ERST
 
 DEF("acpitable", HAS_ARG, QEMU_OPTION_acpitable,
@@ -2698,7 +2686,7 @@ DEF("smbios", HAS_ARG, QEMU_OPTION_smbios,
     "                specify SMBIOS type 3 fields\n"
     "-smbios type=4[,sock_pfx=str][,manufacturer=str][,version=str][,serial=str]\n"
     "              [,asset=str][,part=str][,max-speed=%d][,current-speed=%d]\n"
-    "              [,processor-family=%d,processor-id=%d]\n"
+    "              [,processor-id=%d]\n"
     "                specify SMBIOS type 4 fields\n"
     "-smbios type=8[,external_reference=str][,internal_reference=str][,connector_type=%d][,port_type=%d]\n"
     "                specify SMBIOS type 8 fields\n"
@@ -2709,7 +2697,7 @@ DEF("smbios", HAS_ARG, QEMU_OPTION_smbios,
     "                specify SMBIOS type 17 fields\n"
     "-smbios type=41[,designation=str][,kind=str][,instance=%d][,pcidev=str]\n"
     "                specify SMBIOS type 41 fields\n",
-    QEMU_ARCH_I386 | QEMU_ARCH_ARM | QEMU_ARCH_LOONGARCH | QEMU_ARCH_RISCV)
+    QEMU_ARCH_I386 | QEMU_ARCH_ARM | QEMU_ARCH_LOONGARCH)
 SRST
 ``-smbios file=binary``
     Load SMBIOS entry from binary file.
@@ -2726,11 +2714,8 @@ SRST
 ``-smbios type=3[,manufacturer=str][,version=str][,serial=str][,asset=str][,sku=str]``
     Specify SMBIOS type 3 fields
 
-``-smbios type=4[,sock_pfx=str][,manufacturer=str][,version=str][,serial=str][,asset=str][,part=str][,processor-family=%d][,processor-id=%d]``
+``-smbios type=4[,sock_pfx=str][,manufacturer=str][,version=str][,serial=str][,asset=str][,part=str][,processor-id=%d]``
     Specify SMBIOS type 4 fields
-
-``-smbios type=9[,slot_designation=str][,slot_type=%d][,slot_data_bus_width=%d][,current_usage=%d][,slot_length=%d][,slot_id=%d][,slot_characteristics1=%d][,slot_characteristics12=%d][,pci_device=str]``
-    Specify SMBIOS type 9 fields
 
 ``-smbios type=11[,value=str][,path=filename]``
     Specify SMBIOS type 11 fields
@@ -3115,8 +3100,6 @@ SRST
         server. The files in dir will be exposed as the root of a TFTP
         server. The TFTP client on the guest must be configured in
         binary mode (use the command ``bin`` of the Unix TFTP client).
-        The built-in TFTP server is read-only; it does not implement any
-        command for writing files. QEMU will not write to this directory.
 
     ``tftp-server-name=name``
         In BOOTP reply, broadcast name as the "TFTP server name"
@@ -4011,7 +3994,7 @@ ERST
 
 DEF("initrd", HAS_ARG, QEMU_OPTION_initrd, \
            "-initrd file    use 'file' as initial ram disk\n", QEMU_ARCH_ALL)
-SRST(initrd)
+SRST
 
 ``-initrd file``
     Use file as initial ram disk.
@@ -4143,11 +4126,10 @@ SRST
     default device is ``vc`` in graphical mode and ``stdio`` in non
     graphical mode.
 
-    This option can be used several times to simulate multiple serial
+    This option can be used several times to simulate up to 4 serial
     ports.
 
-    You can use ``-serial none`` to suppress the creation of default
-    serial devices.
+    Use ``-serial none`` to disable all serial ports.
 
     Available character devices are:
 
@@ -4169,17 +4151,10 @@ SRST
         [Linux only] Pseudo TTY (a new PTY is automatically allocated)
 
     ``none``
-        No device is allocated. Note that for machine types which
-        emulate systems where a serial device is always present in
-        real hardware, this may be equivalent to the ``null`` option,
-        in that the serial device is still present but all output
-        is discarded. For boards where the number of serial ports is
-        truly variable, this suppresses the creation of the device.
+        No device is allocated.
 
     ``null``
-        A guest will see the UART or serial device as present in the
-        machine, but all output is discarded, and there is no input.
-        Conceptually equivalent to redirecting the output to ``/dev/null``.
+        void device
 
     ``chardev:id``
         Use a named character device defined with the ``-chardev``
@@ -5526,7 +5501,7 @@ SRST
             -object filter-redirector,netdev=hn0,id=redire0,queue=rx,indev=compare_out
             -object filter-redirector,netdev=hn0,id=redire1,queue=rx,outdev=compare0
             -object iothread,id=iothread1
-            -object colo-compare,id=comp0,primary_in=compare0-0,secondary_in=compare1,outdev=compare_out0,notify_dev=notify_way,iothread=iothread1
+            -object colo-compare,id=comp0,primary_in=compare0-0,secondary_in=compare1,outdev=compare_out0,notify_dev=nofity_way,iothread=iothread1
 
             secondary:
             -netdev tap,id=hn0,vhost=off

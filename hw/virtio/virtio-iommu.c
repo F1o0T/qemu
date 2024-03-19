@@ -29,7 +29,6 @@
 #include "sysemu/reset.h"
 #include "sysemu/sysemu.h"
 #include "qemu/reserved-region.h"
-#include "qemu/units.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "trace.h"
@@ -1116,8 +1115,8 @@ static int virtio_iommu_notify_flag_changed(IOMMUMemoryRegion *iommu_mr,
 }
 
 /*
- * The default mask depends on the "granule" property. For example, with
- * 4k granule, it is -(4 * KiB). When an assigned device has page size
+ * The default mask (TARGET_PAGE_MASK) is the smallest supported guest granule,
+ * for example 0xfffffffffffff000. When an assigned device has page size
  * restrictions due to the hardware IOMMU configuration, apply this restriction
  * to the mask.
  */
@@ -1265,8 +1264,6 @@ static void virtio_iommu_system_reset(void *opaque)
 
     trace_virtio_iommu_system_reset();
 
-    memset(s->iommu_pcibus_by_bus_num, 0, sizeof(s->iommu_pcibus_by_bus_num));
-
     /*
      * config.bypass is sticky across device reset, but should be restored on
      * system reset
@@ -1305,6 +1302,8 @@ static void virtio_iommu_device_realize(DeviceState *dev, Error **errp)
 
     virtio_init(vdev, VIRTIO_ID_IOMMU, sizeof(struct virtio_iommu_config));
 
+    memset(s->iommu_pcibus_by_bus_num, 0, sizeof(s->iommu_pcibus_by_bus_num));
+
     s->req_vq = virtio_add_queue(vdev, VIOMMU_DEFAULT_QUEUE_SIZE,
                              virtio_iommu_handle_command);
     s->event_vq = virtio_add_queue(vdev, VIOMMU_DEFAULT_QUEUE_SIZE, NULL);
@@ -1314,32 +1313,8 @@ static void virtio_iommu_device_realize(DeviceState *dev, Error **errp)
      * in vfio realize
      */
     s->config.bypass = s->boot_bypass;
-    if (s->aw_bits < 32 || s->aw_bits > 64) {
-        error_setg(errp, "aw-bits must be within [32,64]");
-        return;
-    }
-    s->config.input_range.end =
-        s->aw_bits == 64 ? UINT64_MAX : BIT_ULL(s->aw_bits) - 1;
-
-    switch (s->granule_mode) {
-    case GRANULE_MODE_4K:
-        s->config.page_size_mask = -(4 * KiB);
-        break;
-    case GRANULE_MODE_8K:
-        s->config.page_size_mask = -(8 * KiB);
-        break;
-    case GRANULE_MODE_16K:
-        s->config.page_size_mask = -(16 * KiB);
-        break;
-    case GRANULE_MODE_64K:
-        s->config.page_size_mask = -(64 * KiB);
-        break;
-    case GRANULE_MODE_HOST:
-        s->config.page_size_mask = qemu_real_host_page_mask();
-        break;
-    default:
-        error_setg(errp, "Unsupported granule mode");
-    }
+    s->config.page_size_mask = qemu_target_page_mask();
+    s->config.input_range.end = UINT64_MAX;
     s->config.domain_range.end = UINT32_MAX;
     s->config.probe_size = VIOMMU_PROBE_SIZE;
 
@@ -1547,9 +1522,6 @@ static Property virtio_iommu_properties[] = {
     DEFINE_PROP_LINK("primary-bus", VirtIOIOMMU, primary_bus,
                      TYPE_PCI_BUS, PCIBus *),
     DEFINE_PROP_BOOL("boot-bypass", VirtIOIOMMU, boot_bypass, true),
-    DEFINE_PROP_GRANULE_MODE("granule", VirtIOIOMMU, granule_mode,
-                             GRANULE_MODE_HOST),
-    DEFINE_PROP_UINT8("aw-bits", VirtIOIOMMU, aw_bits, 64),
     DEFINE_PROP_END_OF_LIST(),
 };
 

@@ -30,12 +30,6 @@ typedef struct VhostVDPAHostNotifier {
     void *addr;
 } VhostVDPAHostNotifier;
 
-typedef enum SVQTransitionState {
-    SVQ_TSTATE_DISABLING = -1,
-    SVQ_TSTATE_DONE,
-    SVQ_TSTATE_ENABLING
-} SVQTransitionState;
-
 /* Info shared by all vhost_vdpa device models */
 typedef struct vhost_vdpa_shared {
     int device_fd;
@@ -53,9 +47,6 @@ typedef struct vhost_vdpa_shared {
 
     /* Vdpa must send shadow addresses as IOTLB key for data queues, not GPA */
     bool shadow_data;
-
-    /* SVQ switching is in progress, or already completed? */
-    SVQTransitionState svq_switching;
 } VhostVDPAShared;
 
 typedef struct vhost_vdpa {

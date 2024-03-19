@@ -12,7 +12,6 @@
 
 #include "parallel.h"
 
-#include "exec/ioport.h"
 #include "hw/isa/isa.h"
 #include "qom/object.h"
 
@@ -26,10 +25,6 @@ struct ISAParallelState {
     uint32_t iobase;
     uint32_t isairq;
     ParallelState state;
-    PortioList portio_list;
 };
-
-void isa_parallel_set_iobase(ISADevice *parallel, hwaddr iobase);
-void isa_parallel_set_enabled(ISADevice *parallel, bool enabled);
 
 #endif /* HW_PARALLEL_ISA_H */

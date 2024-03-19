@@ -73,7 +73,8 @@ static void connex_init(MachineState *machine)
                           FLASH_SECTOR_SIZE, 2, 0, 0, 0, 0, 0);
 
     /* Interrupt line of NIC is connected to GPIO line 36 */
-    smc91c111_init(0x04000300, qdev_get_gpio_in(cpu->gpio, 36));
+    smc91c111_init(&nd_table[0], 0x04000300,
+                    qdev_get_gpio_in(cpu->gpio, 36));
 }
 
 static void verdex_init(MachineState *machine)
@@ -96,7 +97,8 @@ static void verdex_init(MachineState *machine)
                           FLASH_SECTOR_SIZE, 2, 0, 0, 0, 0, 0);
 
     /* Interrupt line of NIC is connected to GPIO line 99 */
-    smc91c111_init(0x04000300, qdev_get_gpio_in(cpu->gpio, 99));
+    smc91c111_init(&nd_table[0], 0x04000300,
+                    qdev_get_gpio_in(cpu->gpio, 99));
 }
 
 static void connex_class_init(ObjectClass *oc, void *data)
@@ -106,7 +108,6 @@ static void connex_class_init(ObjectClass *oc, void *data)
     mc->desc = "Gumstix Connex (PXA255)";
     mc->init = connex_init;
     mc->ignore_memory_transaction_failures = true;
-    mc->deprecation_reason = "machine is old and unmaintained";
 }
 
 static const TypeInfo connex_type = {
@@ -122,7 +123,6 @@ static void verdex_class_init(ObjectClass *oc, void *data)
     mc->desc = "Gumstix Verdex Pro XL6P COMs (PXA270)";
     mc->init = verdex_init;
     mc->ignore_memory_transaction_failures = true;
-    mc->deprecation_reason = "machine is old and unmaintained";
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("pxa270-c0");
 }
 

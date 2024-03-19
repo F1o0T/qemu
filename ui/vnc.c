@@ -1931,8 +1931,7 @@ static void do_key_event(VncState *vs, int down, int keycode, int sym)
     }
 
     qkbd_state_key_event(vs->vd->kbd, qcode, down);
-    if (!qemu_console_is_graphic(vs->vd->dcl.con)) {
-        QemuTextConsole *con = QEMU_TEXT_CONSOLE(vs->vd->dcl.con);
+    if (!qemu_console_is_graphic(NULL)) {
         bool numlock = qkbd_state_modifier_get(vs->vd->kbd, QKBD_MOD_NUMLOCK);
         bool control = qkbd_state_modifier_get(vs->vd->kbd, QKBD_MOD_CTRL);
         /* QEMU console emulation */
@@ -1946,88 +1945,88 @@ static void do_key_event(VncState *vs, int down, int keycode, int sym)
             case 0xb8:                          /* Right ALT */
                 break;
             case 0xc8:
-                qemu_text_console_put_keysym(con, QEMU_KEY_UP);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_UP);
                 break;
             case 0xd0:
-                qemu_text_console_put_keysym(con, QEMU_KEY_DOWN);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_DOWN);
                 break;
             case 0xcb:
-                qemu_text_console_put_keysym(con, QEMU_KEY_LEFT);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_LEFT);
                 break;
             case 0xcd:
-                qemu_text_console_put_keysym(con, QEMU_KEY_RIGHT);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_RIGHT);
                 break;
             case 0xd3:
-                qemu_text_console_put_keysym(con, QEMU_KEY_DELETE);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_DELETE);
                 break;
             case 0xc7:
-                qemu_text_console_put_keysym(con, QEMU_KEY_HOME);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_HOME);
                 break;
             case 0xcf:
-                qemu_text_console_put_keysym(con, QEMU_KEY_END);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_END);
                 break;
             case 0xc9:
-                qemu_text_console_put_keysym(con, QEMU_KEY_PAGEUP);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_PAGEUP);
                 break;
             case 0xd1:
-                qemu_text_console_put_keysym(con, QEMU_KEY_PAGEDOWN);
+                qemu_text_console_put_keysym(NULL, QEMU_KEY_PAGEDOWN);
                 break;
 
             case 0x47:
-                qemu_text_console_put_keysym(con, numlock ? '7' : QEMU_KEY_HOME);
+                qemu_text_console_put_keysym(NULL, numlock ? '7' : QEMU_KEY_HOME);
                 break;
             case 0x48:
-                qemu_text_console_put_keysym(con, numlock ? '8' : QEMU_KEY_UP);
+                qemu_text_console_put_keysym(NULL, numlock ? '8' : QEMU_KEY_UP);
                 break;
             case 0x49:
-                qemu_text_console_put_keysym(con, numlock ? '9' : QEMU_KEY_PAGEUP);
+                qemu_text_console_put_keysym(NULL, numlock ? '9' : QEMU_KEY_PAGEUP);
                 break;
             case 0x4b:
-                qemu_text_console_put_keysym(con, numlock ? '4' : QEMU_KEY_LEFT);
+                qemu_text_console_put_keysym(NULL, numlock ? '4' : QEMU_KEY_LEFT);
                 break;
             case 0x4c:
-                qemu_text_console_put_keysym(con, '5');
+                qemu_text_console_put_keysym(NULL, '5');
                 break;
             case 0x4d:
-                qemu_text_console_put_keysym(con, numlock ? '6' : QEMU_KEY_RIGHT);
+                qemu_text_console_put_keysym(NULL, numlock ? '6' : QEMU_KEY_RIGHT);
                 break;
             case 0x4f:
-                qemu_text_console_put_keysym(con, numlock ? '1' : QEMU_KEY_END);
+                qemu_text_console_put_keysym(NULL, numlock ? '1' : QEMU_KEY_END);
                 break;
             case 0x50:
-                qemu_text_console_put_keysym(con, numlock ? '2' : QEMU_KEY_DOWN);
+                qemu_text_console_put_keysym(NULL, numlock ? '2' : QEMU_KEY_DOWN);
                 break;
             case 0x51:
-                qemu_text_console_put_keysym(con, numlock ? '3' : QEMU_KEY_PAGEDOWN);
+                qemu_text_console_put_keysym(NULL, numlock ? '3' : QEMU_KEY_PAGEDOWN);
                 break;
             case 0x52:
-                qemu_text_console_put_keysym(con, '0');
+                qemu_text_console_put_keysym(NULL, '0');
                 break;
             case 0x53:
-                qemu_text_console_put_keysym(con, numlock ? '.' : QEMU_KEY_DELETE);
+                qemu_text_console_put_keysym(NULL, numlock ? '.' : QEMU_KEY_DELETE);
                 break;
 
             case 0xb5:
-                qemu_text_console_put_keysym(con, '/');
+                qemu_text_console_put_keysym(NULL, '/');
                 break;
             case 0x37:
-                qemu_text_console_put_keysym(con, '*');
+                qemu_text_console_put_keysym(NULL, '*');
                 break;
             case 0x4a:
-                qemu_text_console_put_keysym(con, '-');
+                qemu_text_console_put_keysym(NULL, '-');
                 break;
             case 0x4e:
-                qemu_text_console_put_keysym(con, '+');
+                qemu_text_console_put_keysym(NULL, '+');
                 break;
             case 0x9c:
-                qemu_text_console_put_keysym(con, '\n');
+                qemu_text_console_put_keysym(NULL, '\n');
                 break;
 
             default:
                 if (control) {
-                    qemu_text_console_put_keysym(con, sym & 0x1f);
+                    qemu_text_console_put_keysym(NULL, sym & 0x1f);
                 } else {
-                    qemu_text_console_put_keysym(con, sym);
+                    qemu_text_console_put_keysym(NULL, sym);
                 }
                 break;
             }
@@ -2045,7 +2044,7 @@ static void key_event(VncState *vs, int down, uint32_t sym)
     int keycode;
     int lsym = sym;
 
-    if (lsym >= 'A' && lsym <= 'Z' && qemu_console_is_graphic(vs->vd->dcl.con)) {
+    if (lsym >= 'A' && lsym <= 'Z' && qemu_console_is_graphic(NULL)) {
         lsym = lsym - 'A' + 'a';
     }
 
@@ -2145,16 +2144,16 @@ static void set_encodings(VncState *vs, int32_t *encodings, size_t n_encodings)
             vs->vnc_encoding = enc;
             break;
         case VNC_ENCODING_HEXTILE:
-            vnc_set_feature(vs, VNC_FEATURE_HEXTILE);
+            vs->features |= VNC_FEATURE_HEXTILE_MASK;
             vs->vnc_encoding = enc;
             break;
         case VNC_ENCODING_TIGHT:
-            vnc_set_feature(vs, VNC_FEATURE_TIGHT);
+            vs->features |= VNC_FEATURE_TIGHT_MASK;
             vs->vnc_encoding = enc;
             break;
 #ifdef CONFIG_PNG
         case VNC_ENCODING_TIGHT_PNG:
-            vnc_set_feature(vs, VNC_FEATURE_TIGHT_PNG);
+            vs->features |= VNC_FEATURE_TIGHT_PNG_MASK;
             vs->vnc_encoding = enc;
             break;
 #endif
@@ -2164,57 +2163,57 @@ static void set_encodings(VncState *vs, int32_t *encodings, size_t n_encodings)
              * So prioritize ZRLE, even if the client hints that it prefers
              * ZLIB.
              */
-            if (!vnc_has_feature(vs, VNC_FEATURE_ZRLE)) {
-                vnc_set_feature(vs, VNC_FEATURE_ZLIB);
+            if ((vs->features & VNC_FEATURE_ZRLE_MASK) == 0) {
+                vs->features |= VNC_FEATURE_ZLIB_MASK;
                 vs->vnc_encoding = enc;
             }
             break;
         case VNC_ENCODING_ZRLE:
-            vnc_set_feature(vs, VNC_FEATURE_ZRLE);
+            vs->features |= VNC_FEATURE_ZRLE_MASK;
             vs->vnc_encoding = enc;
             break;
         case VNC_ENCODING_ZYWRLE:
-            vnc_set_feature(vs, VNC_FEATURE_ZYWRLE);
+            vs->features |= VNC_FEATURE_ZYWRLE_MASK;
             vs->vnc_encoding = enc;
             break;
         case VNC_ENCODING_DESKTOPRESIZE:
-            vnc_set_feature(vs, VNC_FEATURE_RESIZE);
+            vs->features |= VNC_FEATURE_RESIZE_MASK;
             break;
         case VNC_ENCODING_DESKTOP_RESIZE_EXT:
-            vnc_set_feature(vs, VNC_FEATURE_RESIZE_EXT);
+            vs->features |= VNC_FEATURE_RESIZE_EXT_MASK;
             break;
         case VNC_ENCODING_POINTER_TYPE_CHANGE:
-            vnc_set_feature(vs, VNC_FEATURE_POINTER_TYPE_CHANGE);
+            vs->features |= VNC_FEATURE_POINTER_TYPE_CHANGE_MASK;
             break;
         case VNC_ENCODING_RICH_CURSOR:
-            vnc_set_feature(vs, VNC_FEATURE_RICH_CURSOR);
+            vs->features |= VNC_FEATURE_RICH_CURSOR_MASK;
             break;
         case VNC_ENCODING_ALPHA_CURSOR:
-            vnc_set_feature(vs, VNC_FEATURE_ALPHA_CURSOR);
+            vs->features |= VNC_FEATURE_ALPHA_CURSOR_MASK;
             break;
         case VNC_ENCODING_EXT_KEY_EVENT:
             send_ext_key_event_ack(vs);
             break;
         case VNC_ENCODING_AUDIO:
             if (vs->vd->audio_state) {
-                vnc_set_feature(vs, VNC_FEATURE_AUDIO);
+                vs->features |= VNC_FEATURE_AUDIO_MASK;
                 send_ext_audio_ack(vs);
             }
             break;
         case VNC_ENCODING_WMVi:
-            vnc_set_feature(vs, VNC_FEATURE_WMVI);
+            vs->features |= VNC_FEATURE_WMVI_MASK;
             break;
         case VNC_ENCODING_LED_STATE:
-            vnc_set_feature(vs, VNC_FEATURE_LED_STATE);
+            vs->features |= VNC_FEATURE_LED_STATE_MASK;
             break;
         case VNC_ENCODING_XVP:
             if (vs->vd->power_control) {
-                vnc_set_feature(vs, VNC_FEATURE_XVP);
+                vs->features |= VNC_FEATURE_XVP_MASK;
                 send_xvp_message(vs, VNC_XVP_CODE_INIT);
             }
             break;
         case VNC_ENCODING_CLIPBOARD_EXT:
-            vnc_set_feature(vs, VNC_FEATURE_CLIPBOARD_EXT);
+            vs->features |= VNC_FEATURE_CLIPBOARD_EXT_MASK;
             vnc_server_cut_text_caps(vs);
             break;
         case VNC_ENCODING_COMPRESSLEVEL0 ... VNC_ENCODING_COMPRESSLEVEL0 + 9:
@@ -2446,11 +2445,6 @@ static int protocol_client_msg(VncState *vs, uint8_t *data, size_t len)
         }
 
         if (read_s32(data, 4) < 0) {
-            if (!vnc_has_feature(vs, VNC_FEATURE_CLIPBOARD_EXT)) {
-                error_report("vnc: extended clipboard message while disabled");
-                vnc_client_error(vs);
-                break;
-            }
             if (dlen < 4) {
                 error_report("vnc: malformed payload (header less than 4 bytes)"
                              " in extended clipboard pseudo-encoding.");

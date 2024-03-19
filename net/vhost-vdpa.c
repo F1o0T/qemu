@@ -26,15 +26,15 @@
 #include <err.h>
 #include "standard-headers/linux/virtio_net.h"
 #include "monitor/monitor.h"
+#include "migration/migration.h"
 #include "migration/misc.h"
 #include "hw/virtio/vhost.h"
-#include "trace.h"
 
 /* Todo:need to add the multiqueue support here */
 typedef struct VhostVDPAState {
     NetClientState nc;
     struct vhost_vdpa vhost_vdpa;
-    NotifierWithReturn migration_state;
+    Notifier migration_state;
     VHostNetState *vhost_net;
 
     /* Control commands shadow buffers */
@@ -287,21 +287,6 @@ static ssize_t vhost_vdpa_receive(NetClientState *nc, const uint8_t *buf,
     return size;
 }
 
-
-/** From any vdpa net client, get the netclient of the i-th queue pair */
-static VhostVDPAState *vhost_vdpa_net_get_nc_vdpa(VhostVDPAState *s, int i)
-{
-    NICState *nic = qemu_get_nic(s->nc.peer);
-    NetClientState *nc_i = qemu_get_peer(nic->ncs, i);
-
-    return DO_UPCAST(VhostVDPAState, nc, nc_i);
-}
-
-static VhostVDPAState *vhost_vdpa_net_first_nc_vdpa(VhostVDPAState *s)
-{
-    return vhost_vdpa_net_get_nc_vdpa(s, 0);
-}
-
 static void vhost_vdpa_net_log_global_enable(VhostVDPAState *s, bool enable)
 {
     struct vhost_vdpa *v = &s->vhost_vdpa;
@@ -323,8 +308,6 @@ static void vhost_vdpa_net_log_global_enable(VhostVDPAState *s, bool enable)
     data_queue_pairs = n->multiqueue ? n->max_queue_pairs : 1;
     cvq = virtio_vdev_has_feature(vdev, VIRTIO_NET_F_CTRL_VQ) ?
                                   n->max_ncs - n->max_queue_pairs : 0;
-    v->shared->svq_switching = enable ?
-        SVQ_TSTATE_ENABLING : SVQ_TSTATE_DISABLING;
     /*
      * TODO: vhost_net_stop does suspend, get_base and reset. We can be smarter
      * in the future and resume the device if read-only operations between
@@ -337,20 +320,19 @@ static void vhost_vdpa_net_log_global_enable(VhostVDPAState *s, bool enable)
     if (unlikely(r < 0)) {
         error_report("unable to start vhost net: %s(%d)", g_strerror(-r), -r);
     }
-    v->shared->svq_switching = SVQ_TSTATE_DONE;
 }
 
-static int vdpa_net_migration_state_notifier(NotifierWithReturn *notifier,
-                                             MigrationEvent *e, Error **errp)
+static void vdpa_net_migration_state_notifier(Notifier *notifier, void *data)
 {
-    VhostVDPAState *s = container_of(notifier, VhostVDPAState, migration_state);
+    MigrationState *migration = data;
+    VhostVDPAState *s = container_of(notifier, VhostVDPAState,
+                                     migration_state);
 
-    if (e->type == MIG_EVENT_PRECOPY_SETUP) {
+    if (migration_in_setup(migration)) {
         vhost_vdpa_net_log_global_enable(s, true);
-    } else if (e->type == MIG_EVENT_PRECOPY_FAILED) {
+    } else if (migration_has_failed(migration)) {
         vhost_vdpa_net_log_global_enable(s, false);
     }
-    return 0;
 }
 
 static void vhost_vdpa_net_data_start_first(VhostVDPAState *s)
@@ -373,7 +355,7 @@ static int vhost_vdpa_net_data_start(NetClientState *nc)
     assert(nc->info->type == NET_CLIENT_DRIVER_VHOST_VDPA);
 
     if (s->always_svq ||
-        migration_is_setup_or_active()) {
+        migration_is_setup_or_active(migrate_get_current()->state)) {
         v->shadow_vqs_enabled = true;
     } else {
         v->shadow_vqs_enabled = false;
@@ -463,8 +445,6 @@ static int vhost_vdpa_set_address_space_id(struct vhost_vdpa *v,
     };
     int r;
 
-    trace_vhost_vdpa_set_address_space_id(v, vq_group, asid_num);
-
     r = ioctl(v->shared->device_fd, VHOST_VDPA_SET_GROUP_ASID, &asid);
     if (unlikely(r < 0)) {
         error_report("Can't set vq group %u asid %u, errno=%d (%s)",
@@ -531,7 +511,7 @@ dma_map_err:
 
 static int vhost_vdpa_net_cvq_start(NetClientState *nc)
 {
-    VhostVDPAState *s, *s0;
+    VhostVDPAState *s;
     struct vhost_vdpa *v;
     int64_t cvq_group;
     int r;
@@ -542,8 +522,7 @@ static int vhost_vdpa_net_cvq_start(NetClientState *nc)
     s = DO_UPCAST(VhostVDPAState, nc, nc);
     v = &s->vhost_vdpa;
 
-    s0 = vhost_vdpa_net_first_nc_vdpa(s);
-    v->shadow_vqs_enabled = s0->vhost_vdpa.shadow_vqs_enabled;
+    v->shadow_vqs_enabled = v->shared->shadow_data;
     s->vhost_vdpa.address_space_id = VHOST_VDPA_GUEST_PA_ASID;
 
     if (v->shared->shadow_data) {
@@ -717,7 +696,6 @@ static ssize_t vhost_vdpa_net_load_cmd(VhostVDPAState *s,
 
     assert(data_size < vhost_vdpa_net_cvq_cmd_page_len() - sizeof(ctrl));
     cmd_size = sizeof(ctrl) + data_size;
-    trace_vhost_vdpa_net_load_cmd(s, class, cmd, data_num, data_size);
     if (vhost_svq_available_slots(svq) < 2 ||
         iov_size(out_cursor, 1) < cmd_size) {
         /*
@@ -749,7 +727,6 @@ static ssize_t vhost_vdpa_net_load_cmd(VhostVDPAState *s,
 
     r = vhost_vdpa_net_cvq_add(s, &out, 1, &in, 1);
     if (unlikely(r < 0)) {
-        trace_vhost_vdpa_net_load_cmd_retval(s, class, cmd, r);
         return r;
     }
 
@@ -940,8 +917,6 @@ static int vhost_vdpa_net_load_mq(VhostVDPAState *s,
     if (!virtio_vdev_has_feature(&n->parent_obj, VIRTIO_NET_F_MQ)) {
         return 0;
     }
-
-    trace_vhost_vdpa_net_load_mq(s, n->curr_queue_pairs);
 
     mq.virtqueue_pairs = cpu_to_le16(n->curr_queue_pairs);
     const struct iovec data = {
@@ -1582,12 +1557,13 @@ static const VhostShadowVirtqueueOps vhost_vdpa_net_svq_ops = {
 static int vhost_vdpa_probe_cvq_isolation(int device_fd, uint64_t features,
                                           int cvq_index, Error **errp)
 {
-    ERRP_GUARD();
     uint64_t backend_features;
     int64_t cvq_group;
     uint8_t status = VIRTIO_CONFIG_S_ACKNOWLEDGE |
                      VIRTIO_CONFIG_S_DRIVER;
     int r;
+
+    ERRP_GUARD();
 
     r = ioctl(device_fd, VHOST_GET_BACKEND_FEATURES, &backend_features);
     if (unlikely(r < 0)) {
@@ -1775,7 +1751,6 @@ static int vhost_vdpa_get_max_queue_pairs(int fd, uint64_t features,
 int net_init_vhost_vdpa(const Netdev *netdev, const char *name,
                         NetClientState *peer, Error **errp)
 {
-    ERRP_GUARD();
     const NetdevVhostVDPAOptions *opts;
     uint64_t features;
     int vdpa_device_fd;

@@ -66,7 +66,8 @@ void HELPER(wsr_ibreaka)(CPUXtensaState *env, uint32_t i, uint32_t v)
 
 bool xtensa_debug_check_breakpoint(CPUState *cs)
 {
-    CPUXtensaState *env = cpu_env(cs);
+    XtensaCPU *cpu = XTENSA_CPU(cs);
+    CPUXtensaState *env = &cpu->env;
     unsigned int i;
 
     if (xtensa_get_cintlevel(env) >= env->config->debug_level) {

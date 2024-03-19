@@ -199,18 +199,13 @@ bool qemu_chr_fe_init(CharBackend *b, Chardev *s, Error **errp)
             MuxChardev *d = MUX_CHARDEV(s);
 
             if (d->mux_cnt >= MAX_MUX) {
-                error_setg(errp,
-                           "too many uses of multiplexed chardev '%s'"
-                           " (maximum is " stringify(MAX_MUX) ")",
-                           s->label);
-                return false;
+                goto unavailable;
             }
 
             d->backends[d->mux_cnt] = b;
             tag = d->mux_cnt++;
         } else if (s->be) {
-            error_setg(errp, "chardev '%s' is already in use", s->label);
-            return false;
+            goto unavailable;
         } else {
             s->be = b;
         }
@@ -220,6 +215,10 @@ bool qemu_chr_fe_init(CharBackend *b, Chardev *s, Error **errp)
     b->tag = tag;
     b->chr = s;
     return true;
+
+unavailable:
+    error_setg(errp, QERR_DEVICE_IN_USE, s->label);
+    return false;
 }
 
 void qemu_chr_fe_deinit(CharBackend *b, bool del)

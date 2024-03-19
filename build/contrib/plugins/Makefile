@@ -1,0 +1,1 @@
+/home/nxf76051/qemu/contrib/plugins/Makefile

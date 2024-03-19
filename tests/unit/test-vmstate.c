@@ -24,6 +24,7 @@
 
 #include "qemu/osdep.h"
 
+#include "../migration/migration.h"
 #include "migration/vmstate.h"
 #include "migration/qemu-file-types.h"
 #include "../migration/qemu-file.h"

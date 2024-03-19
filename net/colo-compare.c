@@ -28,6 +28,7 @@
 #include "sysemu/iothread.h"
 #include "net/colo-compare.h"
 #include "migration/colo.h"
+#include "migration/migration.h"
 #include "util.h"
 
 #include "block/aio-wait.h"
@@ -188,7 +189,7 @@ static void colo_compare_inconsistency_notify(CompareState *s)
         notify_remote_frame(s);
     } else {
         notifier_list_notify(&colo_compare_notifiers,
-                             NULL);
+                             migrate_get_current());
     }
 }
 

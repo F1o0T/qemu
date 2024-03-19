@@ -2252,7 +2252,8 @@ void coroutine_fn qmp_block_resize(const char *device, const char *node_name,
     }
 
     bdrv_graph_co_rdlock();
-    if (bdrv_op_is_blocked(bs, BLOCK_OP_TYPE_RESIZE, errp)) {
+    if (bdrv_op_is_blocked(bs, BLOCK_OP_TYPE_RESIZE, NULL)) {
+        error_setg(errp, QERR_DEVICE_IN_USE, device);
         bdrv_graph_co_rdunlock();
         return;
     }

@@ -28,19 +28,28 @@
 
 static void nios2_cpu_set_pc(CPUState *cs, vaddr value)
 {
-    cpu_env(cs)->pc = value;
+    Nios2CPU *cpu = NIOS2_CPU(cs);
+    CPUNios2State *env = &cpu->env;
+
+    env->pc = value;
 }
 
 static vaddr nios2_cpu_get_pc(CPUState *cs)
 {
-    return cpu_env(cs)->pc;
+    Nios2CPU *cpu = NIOS2_CPU(cs);
+    CPUNios2State *env = &cpu->env;
+
+    return env->pc;
 }
 
 static void nios2_restore_state_to_opc(CPUState *cs,
                                        const TranslationBlock *tb,
                                        const uint64_t *data)
 {
-    cpu_env(cs)->pc = data[0];
+    Nios2CPU *cpu = NIOS2_CPU(cs);
+    CPUNios2State *env = &cpu->env;
+
+    env->pc = data[0];
 }
 
 static bool nios2_cpu_has_work(CPUState *cs)
@@ -48,17 +57,11 @@ static bool nios2_cpu_has_work(CPUState *cs)
     return cs->interrupt_request & CPU_INTERRUPT_HARD;
 }
 
-static int nios2_cpu_mmu_index(CPUState *cs, bool ifetch)
-{
-    return (cpu_env(cs)->ctrl[CR_STATUS] & CR_STATUS_U
-            ? MMU_USER_IDX : MMU_SUPERVISOR_IDX);
-}
-
 static void nios2_cpu_reset_hold(Object *obj)
 {
     CPUState *cs = CPU(obj);
     Nios2CPU *cpu = NIOS2_CPU(cs);
-    Nios2CPUClass *ncc = NIOS2_CPU_GET_CLASS(obj);
+    Nios2CPUClass *ncc = NIOS2_CPU_GET_CLASS(cpu);
     CPUNios2State *env = &cpu->env;
 
     if (ncc->parent_phases.hold) {
@@ -378,7 +381,6 @@ static void nios2_cpu_class_init(ObjectClass *oc, void *data)
 
     cc->class_by_name = nios2_cpu_class_by_name;
     cc->has_work = nios2_cpu_has_work;
-    cc->mmu_index = nios2_cpu_mmu_index;
     cc->dump_state = nios2_cpu_dump_state;
     cc->set_pc = nios2_cpu_set_pc;
     cc->get_pc = nios2_cpu_get_pc;

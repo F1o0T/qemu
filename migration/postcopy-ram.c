@@ -77,9 +77,10 @@ int postcopy_notify(enum PostcopyNotifyReason reason, Error **errp)
 {
     struct PostcopyNotifyData pnd;
     pnd.reason = reason;
+    pnd.errp = errp;
 
     return notifier_with_return_list_notify(&postcopy_notifier_list,
-                                            &pnd, errp);
+                                            &pnd);
 }
 
 /*
@@ -283,10 +284,10 @@ static bool request_ufd_features(int ufd, uint64_t features)
 static bool ufd_check_and_apply(int ufd, MigrationIncomingState *mis,
                                 Error **errp)
 {
-    ERRP_GUARD();
     uint64_t asked_features = 0;
     static uint64_t supported_features;
 
+    ERRP_GUARD();
     /*
      * it's not possible to
      * request UFFD_API twice per one fd
@@ -371,7 +372,6 @@ static int test_ramblock_postcopiable(RAMBlock *rb, Error **errp)
  */
 bool postcopy_ram_supported_by_host(MigrationIncomingState *mis, Error **errp)
 {
-    ERRP_GUARD();
     long pagesize = qemu_real_host_page_size();
     int ufd = -1;
     bool ret = false; /* Error unless we change it */
@@ -381,6 +381,7 @@ bool postcopy_ram_supported_by_host(MigrationIncomingState *mis, Error **errp)
     uint64_t feature_mask;
     RAMBlock *block;
 
+    ERRP_GUARD();
     if (qemu_target_page_size() > pagesize) {
         error_setg(errp, "Target page size bigger than host page size");
         goto out;
